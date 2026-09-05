@@ -234,6 +234,7 @@ class DeteccionRovers:
     robot en el lugar; el procedimiento está en las notas de `config_vision.json`.
     """
 
+    ids_rover: frozenset[int]
     ids_ignorados: frozenset[int]
     desfase_posicion: DesfaseMarcadorRobot
     desfase_angular_grados: float
@@ -689,6 +690,7 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     dr = d["deteccion_rovers"]
     desf = dr["desfase_marcador_a_centro_mm"]
     deteccion_rovers = DeteccionRovers(
+        ids_rover=frozenset(int(i) for i in dr["ids_rover"]),
         ids_ignorados=frozenset(int(i) for i in dr["ids_ignorados"]),
         desfase_posicion=DesfaseMarcadorRobot(
             adelante_mm=float(desf["adelante"]),
@@ -861,6 +863,23 @@ def revisar_config(cfg: ConfigVision) -> str | None:
             )
         )
     dr = cfg.deteccion_rovers
+    if not dr.ids_rover:
+        return (
+            "deteccion_rovers.ids_rover está vacío: ningún marcador se aceptaría como "
+            "rover y el sistema publicaría siempre la lista vacía"
+        )
+    chocan_rover = sorted(dr.ids_rover & cfg.marcadores_esquina.ids_esperados)
+    if chocan_rover:
+        return (
+            "deteccion_rovers.ids_rover incluye {}, que son marcadores de ESQUINA. "
+            "Un mismo ID no puede anclar las coordenadas y ser un robot".format(chocan_rover)
+        )
+    chocan_ambas = sorted(dr.ids_rover & dr.ids_ignorados)
+    if chocan_ambas:
+        return (
+            "los IDs {} están en ids_rover y en ids_ignorados a la vez: hay que "
+            "decidir si son rovers o si se descartan".format(chocan_ambas)
+        )
     chocan_esquina = sorted(dr.ids_ignorados & cfg.marcadores_esquina.ids_esperados)
     if chocan_esquina:
         return (

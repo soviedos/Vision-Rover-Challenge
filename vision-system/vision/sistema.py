@@ -162,11 +162,14 @@ def abrir_fuente(cfg: ConfigVision, args):
     return fuente, "cámara {} ({}x{})".format(perfil.camara, ancho, alto)
 
 
-def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje):
+def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados):
     """De un cuadro al estado del mundo. Lanza si la geometría no se puede armar.
 
     Una sola pasada del detector de ArUco por cuadro: el mismo resultado sirve
     para armar las coordenadas y para encontrar los rovers.
+
+    `descartados` es un conjunto que se va llenando con los IDs vistos que no son
+    ni esquina ni rover declarado, para poder informarlos.
 
     Devuelve `(sistema de coordenadas, estado del mundo)`. El sistema se devuelve
     porque la vista lo necesita para dibujar celdas sobre la imagen; el estado es
@@ -181,6 +184,12 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje):
     observación, y la edad de todos los objetos tiene que seguir creciendo.
     """
     detectados = detectar_marcadores(cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario)
+    # Marcadores que no son ni esquina ni rover declarado. Casi siempre son
+    # detecciones falsas de la cuadrícula del tablero, pero también serían un
+    # rover que alguien pegó y nadie declaró: por eso se cuentan y se informan
+    # en vez de descartarse en silencio.
+    descartados.update(
+        set(detectados) - cfg.marcadores_esquina.ids_esperados - cfg.deteccion_rovers.ids_rover)
     # El anclaje aguanta que falte UN marcador: conserva la homografía buena y usa
     # los tres visibles para comprobar que la cámara no se movió. Con dos o menos,
     # o si los tres la desmienten, lanza y el falla-abierto se hace cargo.
@@ -240,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     arbitro = Arbitro(args.fase)
     seguidor = Seguidor(cfg)
     anclaje = AnclajeCancha(cfg)
+    descartados: set[int] = set()
     vista = None
     if args.ventana:
         # La vista es un CONSUMIDOR: solo lee. Si se apaga, el sistema sigue
@@ -287,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
             # que envejece a la vista de todos. El sistema no se calla nunca.
             try:
                 sistema_actual, estado = procesar(
-                    cuadro, cfg, matriz, arbitro.fase, seguidor, anclaje)
+                    cuadro, cfg, matriz, arbitro.fase, seguidor, anclaje, descartados)
                 publicador.actualizar(estado)
                 ultimo_estado = estado
             except ErrorGeometria as exc:
@@ -322,6 +332,13 @@ def main(argv: list[str] | None = None) -> int:
                           "{} ms".format(edad) if edad is not None else "sin estado",
                           seguidor.conservados_rover, seguidor.conservados_cubo),
                       flush=True)
+                if descartados:
+                    print("[aviso] marcadores vistos que NO son ni esquina ni rover "
+                          "declarado, y por eso se descartan: {}. Si alguno es un robot "
+                          "de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si "
+                          "no, son detecciones falsas de la cuadrícula.".format(
+                              sorted(descartados)), flush=True)
+                    descartados.clear()
                 if anclaje.conservando:
                     print("[aviso] falta un marcador de esquina: se ven {}, y se viene "
                           "conservando la geometría hace {} cuadros (desvío {:.2f} mm). "

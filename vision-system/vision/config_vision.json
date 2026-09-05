@@ -125,8 +125,13 @@
   },
   "deteccion_rovers": {
     "_acerca_de": "Detección de rovers a partir de su marcador ArUco (vision/detectors/rovers.py). Qué marcador es un rover NO se declara acá: es rover todo marcador que NO sea una esquina de `marcadores_esquina.disposicion`. Así la regla no se rompe si mañana las esquinas fueran otras, y no hay una lista de IDs de rover que mantener sincronizada con la realidad.",
+    "ids_rover": [
+      10,
+      11
+    ],
+    "_LISTA_EXPLICITA_Y_POR_QUE": "SOLO estos IDs se aceptan como rover. Todo otro marcador que aparezca se descarta.\nAntes la regla era la contraria —era rover todo marcador que NO fuera esquina— y se eligió así para no tener que mantener una lista sincronizada con los marcadores que se peguen de verdad. LA CANCHA REAL LA DESMINTIÓ: la cuadrícula impresa del tablero produce detecciones ArUco espurias, y con la regla abierta cada una se publicaba como un rover fantasma. Peor todavía: una falsa que cayera en el 10 o el 11 pisaría a un rover de verdad, que es un error silencioso y grave.\nEl riesgo de la lista sigue existiendo —si se pega un marcador nuevo y nadie lo agrega acá, ese rover no existe para el sistema— pero es un error RUIDOSO: el rover no aparece y se nota enseguida. Y para que no sea silencioso, el sistema cuenta e informa los marcadores que descarta.",
     "ids_ignorados": [],
-    "_nota_ids_ignorados": "IDs que hay que descartar aunque no sean esquinas. Arranca VACÍO a propósito: descartar en silencio un marcador que sí es un rover es peor que reportar uno de más, que al menos se ve. El caso concreto para el que existe esta lista es el marcador ID 20 de la prueba de precisión (precision.id_marcador_prueba): existe físicamente, y si queda olvidado sobre la cancha se publica como si fuera un rover. Si eso llega a pasar, poner [20] acá.",
+    "_nota_ids_ignorados": "Descartes ADICIONALES, por si algún día conviene nombrarlos aparte. Con `ids_rover` como lista explícita casi no hace falta: lo que no está en la lista ya se descarta. Se conserva porque documenta el caso del marcador ID 20 de la prueba de precisión, que es un objeto físico real.",
     "desfase_marcador_a_centro_mm": {
       "adelante": 0.0,
       "izquierda": 0.0
@@ -260,14 +265,14 @@
     }
   },
   "camara": {
-    "_acerca_de": "Webcam USB real. Cámara de referencia: ArgomTech CAM40, 1080p, lente gran angular, enfoque manual.",
+    "_acerca_de": "Webcam USB real. Cámara OFICIAL del reto: Logitech C270, 720p, enfoque manual. Su campo de visión real, medido en su propia calibración, es de 47,1° horizontal y 27,6° vertical: NO es gran angular, y por eso obliga a montarla a 2,04 m como mínimo para que entre el tablero de 1000 mm. El lado corto del sensor es el que manda.",
     "indice": "menu",
     "_nota_indice": "Qué cámara usar. Tres valores posibles: (1) \"menu\" —el recomendado— muestra las cámaras detectadas numeradas, con su nombre y resolución, y pregunta cuál usar; si hay una sola, la toma sin preguntar. (2) Un número, para no elegir cada vez, una vez que se sabe cuál es. (3) \"auto\", que toma la primera que responda sin preguntar: sirve para correr sin nadie delante, pero OJO, con dos cámaras conectadas puede agarrar la equivocada.",
     "_nota_por_que_menu": "El índice de una webcam USB NO es estable: depende de qué se enchufó primero, de si hay cámara integrada y de si la máquina se reinició. Y elegir mal no da ningún error: da una calibración hecha con la cámara equivocada. Por eso conviene que elija una persona mirando la lista, en vez de que el programa adivine.",
     "backend": "auto",
     "_nota_backend": "auto elige según el sistema operativo: AVFoundation en macOS, DSHOW en Windows, V4L2 en Linux. Se elige DSHOW y no MSMF en Windows porque expone mejor los controles de exposición y enfoque, que es lo que nos importa. Valores posibles: auto, avfoundation, dshow, msmf, v4l2, any.",
-    "ancho": 1920,
-    "alto": 1080,
+    "ancho": 1280,
+    "alto": 720,
     "fps": 30,
     "fourcc": "MJPG",
     "_nota_fourcc": "Muchas webcams entregan 1080p a 5 fps en YUY2 (sin comprimir) y a 30 fps en MJPG. Pedir MJPG suele ser la diferencia entre servible e inservible. Poner null para no pedir ninguno. Lo que la cámara realmente negocie se reporta en el diagnóstico: casi nunca es exactamente lo pedido.",
@@ -310,7 +315,8 @@
       "color_rel_min": 0.05,
       "_nota": "Cuánto tiene que cambiar la imagen entre los dos valores de prueba para dar por confirmado que el ajuste tuvo efecto real. brillo_min en niveles de gris (0-255); los otros dos son diferencias relativas."
     },
-    "_nota_macos": "ADVERTENCIA: en macOS, OpenCV sobre AVFoundation casi no expone controles de cámara, así que es esperable que exposición y enfoque salgan como 'no soportado'. Eso NO significa que la cámara no sirva: significa que macOS no deja tocarlos por esta vía. La prueba que cuenta se hace en Windows con DSHOW, que es el destino de despliegue."
+    "_nota_macos": "ADVERTENCIA: en macOS, OpenCV sobre AVFoundation casi no expone controles de cámara, así que es esperable que exposición y enfoque salgan como 'no soportado'. Eso NO significa que la cámara no sirva: significa que macOS no deja tocarlos por esta vía. La prueba que cuenta se hace en Windows con DSHOW, que es el destino de despliegue.",
+    "_NOTA_RESOLUCION": "1280x720 es el máximo de video de la C270 y es la resolución a la que está CALIBRADA. Pedirle 1920x1080 —como decía antes, que era lo de la ArgomTech— hace que la imagen no coincida con su perfil de distorsión, y el sistema avisa pero la corrección saldría mal. Si se cambia de cámara, hay que cambiar esto Y el perfil por defecto, juntos."
   },
   "calibracion": {
     "_acerca_de": "Calibración INTRÍNSECA del lente: mide cuánto curva las líneas rectas el gran angular, para poder corregirlo. Se hace con un patrón de ajedrez movido en el aire, que NO es el tablero de juego. Es una capa previa: se corrige la imagen y recién después se detectan marcadores y se calcula la geometría de esquinas.",
@@ -333,9 +339,9 @@
     "alpha": 0.0,
     "_nota_alpha": "Cuánto campo visual se conserva al corregir. 0 = recorta a los píxeles válidos, sin bordes negros pero perdiendo algo de borde. 1 = conserva todo el campo, con bordes negros curvados que pueden confundir a los detectores. Si con 0 se pierde de vista algún marcador de esquina, subirlo.",
     "carpeta_perfiles": "calibraciones",
-    "perfil_por_defecto": "argomtech_cam40",
+    "perfil_por_defecto": "logitech_c270",
     "_nota_perfiles": "Cada cámara tiene su PROPIO perfil en esta carpeta, relativa a vision/, y conviven sin pisarse: argomtech_cam40.json, logitech_c270.json, etc. Son los PERFILES DE CÁMARA del CLAUDE.md sección 5: los parámetros específicos de cada aparato van en configuración y no en el código.",
-    "_nota_por_defecto": "Qué cámara usa el sistema cuando nadie elige un perfil explícitamente: en modo automático o al arrancar sin selección. La cámara por defecto del sistema es la ArgomTech CAM40. Se declara acá como dato y no incrustada en el código, para poder cambiarla sin tocar nada.",
+    "_nota_por_defecto": "Qué cámara usa el sistema cuando nadie elige un perfil explícitamente. La cámara OFICIAL del reto es la Logitech C270. Se declara acá como dato y no incrustada en el código, para poder cambiarla sin tocar nada. Tiene que ser coherente con camara.ancho y camara.alto: el perfil describe una cámara A UNA resolución.",
     "_nota_por_que_no_una_ruta_fija": "Antes esto era UNA ruta fija, y el sistema cargaba ese archivo sin importar qué cámara estuviera conectada. Con dos cámaras eso significó corregir una Logitech C270 con el perfil de la CAM40 —que es gran angular y distorsiona mucho más—, deformando la imagen en vez de corregirla, y sin ningún error que lo delatara. De ahí que ahora cada cámara tenga su perfil y que el sistema compare la huella del perfil contra la cámara conectada.",
     "umbrales": {
       "excelente_px": 0.3,

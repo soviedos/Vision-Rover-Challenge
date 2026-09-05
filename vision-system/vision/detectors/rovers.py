@@ -9,18 +9,24 @@ si un rover desapareció. Eso es seguimiento y va en `tracking/`.
 
 Es un productor de los del CLAUDE.md: **detecta, no decide**.
 
-Cómo se separan los rovers de las esquinas
-------------------------------------------
-No hay una lista de "IDs de rover". La regla es al revés: **es rover todo
-marcador que no sea una esquina**, y las esquinas son las que declara
-`marcadores_esquina.disposicion`. Una lista de rovers habría que mantenerla
-sincronizada con los marcadores que se peguen de verdad, y el día que no lo
-estuviera, un rover dejaría de existir sin que nada avisara. Con esta regla, un
-marcador nuevo aparece solo.
+Cuáles marcadores son rovers: una lista explícita
+-------------------------------------------------
+Solo los IDs de `deteccion_rovers.ids_rover` se aceptan como rover. Todo otro
+marcador que aparezca se **descarta**, se cuente o no como esquina.
 
-La única excepción es `ids_ignorados`, que arranca vacío y existe para un caso
-concreto: el marcador de la prueba de precisión, que es un objeto físico real y
-podría quedar olvidado sobre la cancha.
+Antes la regla era la contraria —era rover todo marcador que no fuera esquina—
+y se eligió así para no tener que mantener una lista sincronizada con lo que se
+pegue de verdad. **La cancha real la desmintió:** la cuadrícula impresa del
+tablero produce detecciones ArUco espurias, y con la regla abierta cada una se
+publicaba como un rover fantasma. Y una falsa que cayera en el 10 o el 11
+pisaría la posición de un rover de verdad, en silencio, que es lo peor que
+podría pasar.
+
+El riesgo de la lista sigue existiendo: si se pega un marcador nuevo y nadie lo
+agrega a la configuración, ese rover no existe para el sistema. Pero es un error
+**ruidoso** —el rover simplemente no aparece— y para que no llegue a ser
+silencioso, el detector cuenta los marcadores que descartó y el sistema los
+informa por pantalla.
 
 Por qué todo se calcula en CELDAS y no en píxeles
 --------------------------------------------------
@@ -261,13 +267,17 @@ def detectar_rovers(
     mismo. Eso **no** habilita a indexar por posición: la cantidad de rovers
     cambia entre cuadros y hay que buscarlos por `id` (CLAUDE.md, sección 7).
     """
+    aceptados = cfg.deteccion_rovers.ids_rover
     esquinas = cfg.marcadores_esquina.ids_esperados
     ignorados = cfg.deteccion_rovers.ids_ignorados
     altura = cfg.paralaje.altura_marcador_rover_mm
 
     rovers = []
     for id_aruco in sorted(detectados):
-        if id_aruco in esquinas or id_aruco in ignorados:
+        # Lista explícita: lo que no está, no entra. Un marcador desconocido es
+        # mucho más probable que sea una detección falsa de la cuadrícula del
+        # tablero que un robot que nadie declaró.
+        if id_aruco not in aceptados or id_aruco in esquinas or id_aruco in ignorados:
             continue
         pose = pose_de_marcador(id_aruco, detectados[id_aruco], sistema)
         if pose_de_camara is not None:

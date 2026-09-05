@@ -54,6 +54,9 @@ except ImportError:  # como script suelto
 #: Ojo: la paleta de `panel.py` va en RGB porque la usa Pillow. Son espacios
 #: distintos y mezclarlos pinta las cosas de un color equivocado.
 _ESQUINA = (255, 120, 0)
+#: El perímetro que NO sale del origen, en un tono más apagado: cierra la cancha
+#: sin competir visualmente con los ejes, que son los que llevan información.
+_BORDE = (170, 90, 30)
 _ROVER = (0, 220, 255)
 _GRILLA = (90, 90, 90)
 _TEXTO = (255, 255, 255)
@@ -111,13 +114,26 @@ class Vista:
         de inmediato — y ese es el error de montaje más peligroso, porque el
         sistema publica números válidos y mal sin quejarse.
         """
-        paso = max(1, self._cfg.tablero.cols // 6)
-        for col in range(0, self._cfg.tablero.cols + 1, paso):
-            self._linea_celdas(lienzo, (col, 0), (col, self._cfg.tablero.rows), _GRILLA)
-        for row in range(0, self._cfg.tablero.rows + 1, paso):
-            self._linea_celdas(lienzo, (0, row), (self._cfg.tablero.cols, row), _GRILLA)
-        self._linea_celdas(lienzo, (0, 0), (self._cfg.tablero.cols, 0), _ESQUINA, 2)
-        self._linea_celdas(lienzo, (0, 0), (0, self._cfg.tablero.rows), _ESQUINA, 2)
+        cols, rows = self._cfg.tablero.cols, self._cfg.tablero.rows
+        paso = max(1, cols // 6)
+        for col in range(0, cols + 1, paso):
+            self._linea_celdas(lienzo, (col, 0), (col, rows), _GRILLA)
+        for row in range(0, rows + 1, paso):
+            self._linea_celdas(lienzo, (0, row), (cols, row), _GRILLA)
+
+        # El perímetro completo de la cancha: las cuatro aristas entre los
+        # centros de los marcadores. Cerrarlo importa porque deja ver de un
+        # vistazo si TODA el área está bien mapeada, no solo la esquina del
+        # origen.
+        self._linea_celdas(lienzo, (cols, 0), (cols, rows), _BORDE, 2)   # 1 -> 2
+        self._linea_celdas(lienzo, (0, rows), (cols, rows), _BORDE, 2)   # 3 -> 2
+
+        # Las dos que SALEN DEL ORIGEN van más brillantes y encima, porque no
+        # son decoración: marcan hacia dónde crecen `col` y `row`. Si apuntan al
+        # lado equivocado, los marcadores se pegaron en orden antihorario y
+        # todas las coordenadas salen espejadas.
+        self._linea_celdas(lienzo, (0, 0), (cols, 0), _ESQUINA, 3)       # 0 -> 1 : col
+        self._linea_celdas(lienzo, (0, 0), (0, rows), _ESQUINA, 3)       # 0 -> 3 : row
 
     def _linea_celdas(self, lienzo, desde, hasta, color, grosor=1) -> None:
         p = self._a_px(lienzo, np.array([desde, hasta], dtype=np.float64))

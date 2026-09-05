@@ -124,7 +124,6 @@ rover que decide girar:
   └────────┬────────┘      deduce la POSE DE LA CÁMARA, que hace falta para
            │               corregir el paralaje de los objetos con altura.
            ▼
-           ▼
   ┌─────────────────┐   ④  Busca los rovers por su marcador ArUco y los cubos
   │   detectors/    │      por color. Solo DETECTA: no interpreta.
   │   qué hay dónde │
@@ -601,20 +600,51 @@ El manual completo para los equipos está en
 
 ## 8. Cómo correr y probar lo que ya existe
 
-### Encender el sistema completo
+### 1. Instalar (una sola vez)
+
+El sistema de visión necesita **Python 3.10 o superior**. Desde la raíz del
+repositorio:
+
+```bash
+cd vision-system
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r vision/requirements.txt
+```
+
+Eso instala OpenCV, NumPy y Pillow en un entorno aislado, sin tocar el Python
+del sistema. La carpeta `.venv/` está ignorada por git.
+
+### 2. Encender el sistema
 
 Esto es lo que hace todo: mira, deduce y publica.
 
 ```bash
-.venv/bin/python -m vision.sistema                # con la cámara real
-.venv/bin/python -m vision.sistema --sintetico    # sin cámara, con imágenes generadas
-.venv/bin/python -m vision.sistema --ventana      # además, la vista en vivo
+cd vision-system
+.venv/bin/python -m vision.sistema --ventana
 ```
 
-Mientras corre, se le escribe por teclado: `ready`, `start`, `stop`, `quit`. La
-visión es árbitro y esos comandos son su voz.
+**Los dos comandos importan.** El `cd` no es un detalle: `-m vision.sistema`
+busca el paquete `vision` desde la carpeta actual, así que desde otro lado falla
+con `No module named vision`. Y `.venv/bin/python` es el intérprete **del
+proyecto**, el único que tiene OpenCV instalado; con `python` a secas falla con
+`No module named cv2`.
 
-### La vista en vivo
+Otras formas de arrancarlo:
+
+```bash
+.venv/bin/python -m vision.sistema                # sin ventana: procesa y publica a ciegas
+.venv/bin/python -m vision.sistema --sintetico    # sin cámara, con imágenes generadas
+```
+
+Al arrancar pregunta **qué cámara** usar y qué perfil de calibración, y después
+queda corriendo. Mientras corre se le escribe por teclado: `ready`, `start`,
+`stop`, `quit`. La visión es árbitro y esos comandos son su voz.
+
+> **Si dice `Address already in use`**, quedó un proceso anterior ocupando el
+> puerto 2026: `pkill -f vision.sistema` y volvé a intentar.
+
+
+### 3. La vista en vivo
 
 `--ventana` abre una ventana con **la imagen de la cámara y lo que el sistema
 dedujo, dibujado encima**: los cuatro marcadores, la grilla de celdas
@@ -643,20 +673,7 @@ python3 contrato/test_client.py
 Es el mismo cliente de referencia que usan los equipos, sin modificar: se conecta
 al puerto 2026 y valida cada mensaje contra el contrato.
 
-### Preparar el entorno (una sola vez)
-
-El sistema de visión necesita **Python 3.10 o superior**. Parado en
-`vision-system/`:
-
-```bash
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -r vision/requirements.txt
-```
-
-Eso instala OpenCV, NumPy y Pillow en un entorno aislado, sin tocar el Python
-del sistema. La carpeta `.venv/` está ignorada por git.
-
-### Probar el simulador del contrato
+### Probar el simulador del contrato (sin instalar nada)
 
 Esto **no necesita el entorno virtual ni ninguna instalación**: corre con
 cualquier Python 3.9 o superior. Desde `vision-system/contrato/`, en dos

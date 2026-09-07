@@ -186,10 +186,17 @@ class Publicacion:
     El reloj es **propio y no el de la cámara**: son dos relojes que no deben
     esperarse. Si un cuadro tarda de más, la publicación no se frena; si un
     cliente tiene la red lenta, el procesamiento ni se entera.
+
+    `liberar_puerto_al_arrancar` decide qué pasa si el puerto está tomado: en
+    `true` se termina al proceso que lo tenga, porque el puerto es oficial y el
+    arranque tiene que ser incondicional; en `false` el sistema falla en vez de
+    matar. El porqué completo está en `vision/publish/puerto.py`.
     """
 
     puerto: int
     hz: float
+    liberar_puerto_al_arrancar: bool
+    espera_liberacion_s: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -675,7 +682,12 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     )
 
     pu = d["publicacion"]
-    publicacion = Publicacion(puerto=int(pu["puerto"]), hz=float(pu["hz"]))
+    publicacion = Publicacion(
+        puerto=int(pu["puerto"]),
+        hz=float(pu["hz"]),
+        liberar_puerto_al_arrancar=bool(pu["liberar_puerto_al_arrancar"]),
+        espera_liberacion_s=float(pu["espera_liberacion_s"]),
+    )
 
     lu = d["lugares"]
     lugares = Lugares(
@@ -898,6 +910,8 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         return "publicacion.puerto fuera de rango"
     if cfg.publicacion.hz <= 0:
         return "publicacion.hz debe ser > 0"
+    if cfg.publicacion.espera_liberacion_s < 0:
+        return "publicacion.espera_liberacion_s no puede ser negativo"
     lug = cfg.lugares
     colores_cubo = set(cfg.elementos.cubos.colores)
     colores_deposito = [dep.color for dep in lug.depositos]

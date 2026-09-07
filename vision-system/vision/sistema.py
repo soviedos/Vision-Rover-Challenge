@@ -54,6 +54,7 @@ try:  # como paquete
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
     from .mundo import FASES
+    from .publish.puerto import ErrorPuerto
     from .publish.telemetria import PublicadorTelemetria
     from .tracking.seguimiento import Seguidor
     from .vista import Vista
@@ -72,6 +73,7 @@ except ImportError:  # como script suelto
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
     from vision.mundo import FASES  # type: ignore[no-redef]
+    from vision.publish.puerto import ErrorPuerto  # type: ignore[no-redef]
     from vision.publish.telemetria import PublicadorTelemetria  # type: ignore[no-redef]
     from vision.tracking.seguimiento import Seguidor  # type: ignore[no-redef]
     from vision.vista import Vista  # type: ignore[no-redef]
@@ -272,7 +274,16 @@ def main(argv: list[str] | None = None) -> int:
     print("Comandos: ready | start | stop | quit")
     print("=" * 70)
 
-    publicador.arrancar()
+    try:
+        publicador.arrancar()
+    except ErrorPuerto as exc:
+        # Sin puerto no hay telemetría, y sin telemetría el sistema no sirve
+        # para nada: no tiene sentido seguir procesando cuadros para nadie.
+        print("ERROR: {}".format(exc), file=sys.stderr)
+        if vista is not None:
+            vista.cerrar()
+        fuente.cerrar()
+        return 3
     if sys.stdin and sys.stdin.isatty():
         threading.Thread(target=_hilo_teclado, args=(arbitro, salir),
                          name="teclado", daemon=True).start()

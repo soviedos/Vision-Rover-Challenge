@@ -680,8 +680,10 @@ señal del juez y la operación de la competencia.
 No son comandos disponibles para los equipos ni mecanismos de control de los
 rovers.
 
-> **Si dice `Address already in use`**, quedó un proceso anterior ocupando el
-> puerto 2026: `pkill -f vision.sistema` y volvé a intentar.
+> **El puerto 2026 se reclama solo.** Si un proceso anterior —otra visión, o el
+> simulador— lo tiene tomado, el sistema lo termina y arranca igual, avisando por
+> pantalla a quién terminó. Ya no hace falta matar nada a mano ni existe el
+> `Address already in use` al arrancar.
 
 
 ### 3. La vista en vivo

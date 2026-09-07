@@ -2,7 +2,18 @@
 
 # Vision Rover Challenge
 
-> Este repositorio está en desarrollo. Muy pronto encontrarás ejemplos de código, tutoriales, documentación y otros recursos relacionados con el reto. ¡Vuelve pronto!
+> Inscripción: [sigue este enlace](https://forms.zohopublic.com/pbrenes/form/InscripcionVisionRoverChallenge/formperma/BrlIhyGlHkP2rMzfnJAPL9yKeysvfrFuE6lz2AbGCzs)
+
+<p align="center">
+  <a href="https://youtu.be/0UH3G01p_Bw">
+    <img src="https://img.youtube.com/vi/0UH3G01p_Bw/maxresdefault.jpg" width="600">
+  </a>
+  <br>
+  <a href="https://youtu.be/0UH3G01p_Bw"><b>▶ Ver video en YouTube</b></a>
+</p>
+
+
+Este repositorio está en continuo desarrollo.
 
 El **Vision Rover Challenge** es un reto de robótica colaborativa basado en visión por computadora global.
 

@@ -22,7 +22,7 @@ https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/conexio
 
 ## Sensor de Colores
 
-![Color](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/conexiones/sensorcolor.png)
+![Color](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/conexiones/sensorcolor2.png)
 
 
 ## Motores

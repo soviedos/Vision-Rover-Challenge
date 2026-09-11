@@ -82,7 +82,7 @@ def lado_de_la_zona(depot: dict[str, Any], grid: dict[str, Any]) -> str:
     """A qué borde de la cancha apoya una zona de acopio.
 
     La orientación NO viene en el mensaje: se deduce. Cada zona apoya su lado
-    largo sobre el borde más cercano a su centro, y está a 2,5 celdas de ese
+    largo sobre el borde más cercano a su centro, y está a 3,75 celdas de ese
     borde contra 21,5 de los otros, así que no hay ambigüedad.
     """
     distancias = {

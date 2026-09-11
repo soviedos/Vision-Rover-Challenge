@@ -948,15 +948,13 @@ def _revisar_zonas(cfg: ConfigVision) -> str | None:
 
     if tam.largo_mm <= 0 or tam.fondo_mm <= 0:
         return "lugares.tamano_deposito_mm: largo y fondo deben ser > 0"
-    for nombre, valor in (("largo", tam.largo_mm), ("fondo", tam.fondo_mm)):
-        celdas = valor / cell_mm
-        if abs(celdas - round(celdas)) > 1e-9:
-            return (
-                "lugares.tamano_deposito_mm.{} = {} mm no es múltiplo de la celda de {} mm "
-                "({:.3f} celdas). Las zonas se apoyan en la cuadrícula del tablero: un "
-                "tamaño que no cae en celdas enteras no se puede marcar ni medir sobre la "
-                "cancha".format(nombre, valor, cell_mm, celdas)
-            )
+    # Acá había una regla que exigía que el tamaño cayera en celdas ENTERAS,
+    # argumentando que las zonas se apoyan en la cuadrícula del tablero. Era
+    # falsa: las zonas son VIRTUALES, no se marca nada sobre la cancha, así que
+    # no hay ninguna cuadrícula en la que apoyarse. La regla no protegía de
+    # nada y rechazaba un fondo perfectamente válido de 7,5 celdas. Lo que sí
+    # protege de un dedazo es la comparación contra las constantes del
+    # contrato, acá abajo, que es exacta.
 
     largo_celdas = tam.largo_celdas(cell_mm)
     fondo_celdas = tam.fondo_celdas(cell_mm)

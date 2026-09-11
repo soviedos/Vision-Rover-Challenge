@@ -38,11 +38,16 @@ contrato no puede tener: él ve un cubo y una zona, no una secuencia.
 El conteo es **en vivo**: cuenta los que están adentro **ahora**. Si un rover
 saca un cubo, la cuenta baja.
 
-El problema es que la ventana de aceptación sobre el fondo de la zona es
-angosta —**7,6 mm** a cada lado del eje— así que un cubo dejado justo en el
-borde del criterio entra y sale del veredicto con el puro temblor de la
-detección. Sin permanencia, el número saltaría entre 2 y 3 varias veces por
-segundo, y eso en pantalla **se lee como un sistema roto**.
+El problema es un cubo dejado **justo en el borde del criterio**: ahí entra y
+sale del veredicto con el puro temblor de la detección, y sin permanencia el
+número saltaría entre 2 y 3 varias veces por segundo, que en pantalla **se lee
+como un sistema roto**.
+
+No es hipotético. Con el fondo de zona de 100 mm que tuvo la primera versión, la
+ventana sobre ese eje medía 15,2 mm y en la cancha real un cubo bien puesto
+oscilaba entre 5 y 10 mm afuera del límite, cuadro a cuadro. Hoy la zona es de
+150 mm y la ventana de **65,1 mm**, así que el caso es mucho más raro —pero la
+permanencia se queda: un cubo se puede dejar al borde de cualquier ventana.
 
 **La permanencia solo demora entrar, nunca salir.** Demorar la salida sería peor
 que el titileo: diría que un cubo está entregado cuando un rover ya se lo llevó.

@@ -202,8 +202,8 @@ cancha real se van a comportar distinto.
 
 ### Dónde están
 
-Hay **tres zonas de acopio**, una por color, de **200 × 100 mm** cada una —10 ×
-5 celdas—, al **centro de cada uno de los tres lados que no son el de la
+Hay **tres zonas de acopio**, una por color, de **200 × 150 mm** cada una —10 ×
+7,5 celdas—, al **centro de cada uno de los tres lados que no son el de la
 salida**. Cada cubo va a la zona de su color.
 
 ```
@@ -221,14 +221,16 @@ salida**. Cada cubo va a la zona de su color.
 
 | Lugar | Color | Lado | Centro, en celdas |
 |---|---|---|---|
-| Acopio | **verde** | arriba (del ID 0 al 1) | `(21.5, 2.5)` |
-| Acopio | **rojo** | derecha (del ID 1 al 2) | `(40.5, 21.5)` |
-| Acopio | **azul** | abajo (del ID 2 al 3) | `(21.5, 40.5)` |
-| **Salida** | — | izquierda (del ID 3 al 0) | `(2.5, 21.5)` |
+| Acopio | **verde** | arriba (del ID 0 al 1) | `(21.5, 3.75)` |
+| Acopio | **rojo** | derecha (del ID 1 al 2) | `(39.25, 21.5)` |
+| Acopio | **azul** | abajo (del ID 2 al 3) | `(21.5, 39.25)` |
+| **Salida** | — | izquierda (del ID 3 al 0) | `(3.75, 21.5)` |
 
-Cada zona apoya su **lado largo sobre el borde** de la cancha y entra 100 mm
-hacia adentro, así que su centro queda a **2,5 celdas del borde**. Los dos
-robots arrancan del **mismo punto**, al centro del lado izquierdo.
+Cada zona apoya su **lado largo sobre el borde** de la cancha y entra 150 mm
+hacia adentro, así que su centro queda a **3,75 celdas del borde**. La salida
+está a esa misma distancia del suyo, así que los cuatro lugares fijos quedan con
+el mismo margen. Los dos robots arrancan del **mismo punto**, al centro del lado
+izquierdo.
 
 ### Qué hay que hacer, entonces
 
@@ -250,8 +252,8 @@ dibuja encima de la imagen, con el rectángulo interior de la **ventana de
 aceptación**, que es donde tiene que quedar el centro del cubo para que cuente
 como entregado. Ver la sección 6.
 
-> **El cubo va CENTRADO en el fondo de la zona**, a unos 50 mm del borde: la
-> ventana deja **7,6 mm** de tolerancia a cada lado de esa línea media. Ni
+> **El cubo va CENTRADO en el fondo de la zona**, a unos 75 mm del borde: la
+> ventana deja **32,6 mm** de tolerancia a cada lado de esa línea media. Ni
 > apoyado en el borde de adentro, ni empujado contra el de afuera —que es **la
 > línea entre los centros de los marcadores**, no el borde de la mesa—: pasada
 > esa línea el cubo sobresale de la zona y no cuenta.

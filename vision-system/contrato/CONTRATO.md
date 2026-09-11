@@ -13,7 +13,7 @@ formato con confianza.
 > ### 🔁 Qué cambió en la v2
 >
 > - Las **zonas de acopio** dejan de ser un punto en una esquina: ahora son
->   **rectángulos de 20 × 10 cm**, uno al **centro de cada uno de los tres lados**
+>   **rectángulos de 20 × 15 cm**, uno al **centro de cada uno de los tres lados**
 >   que no son el de la salida. `depots[i]` es el **centro** del rectángulo.
 > - La **salida** deja de estar en la esquina del marcador 0 y pasa al **centro
 >   del lado que va del marcador 0 al 3** (el lado izquierdo). **El origen de
@@ -143,18 +143,18 @@ línea**):
     { "id": 11, "col": 15.265, "row": 28.661, "theta": 40.22, "age_ms": 0 }
   ],
   "cubes": [
-    { "color": "green", "col": 21.480, "row": 2.512,  "age_ms": 0   },
+    { "color": "green", "col": 21.480, "row": 3.762, "age_ms": 0   },
     { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425 },
     { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0   }
   ],
   "obstacles": [],
-  "start":  { "col": 2.5, "row": 21.5 },
+  "start":  { "col": 3.75, "row": 21.5 },
   "depots": [
-    { "color": "green", "col": 21.5, "row": 2.5  },
-    { "color": "red",   "col": 40.5, "row": 21.5 },
-    { "color": "blue",  "col": 21.5, "row": 40.5 }
+    { "color": "green", "col": 21.5,  "row": 3.75  },
+    { "color": "red",   "col": 39.25, "row": 21.5  },
+    { "color": "blue",  "col": 21.5,  "row": 39.25 }
   ],
-  "depot_size": { "length": 10.0, "depth": 5.0 },
+  "depot_size": { "length": 10.0, "depth": 7.5 },
   "cube_side": 3.0
 }
 ```
@@ -164,8 +164,8 @@ línea**):
 > ahí, con su última posición conocida y la edad creciendo. Esto es lo normal,
 > no un error. Ver la sección 6.
 >
-> Y mirá el **verde**: está en `(21.480, 2.512)` y su zona está centrada en
-> `(21.5, 2.5)`. Ese cubo **ya está entregado**, y se comprueba con la cuenta de
+> Y mirá el **verde**: está en `(21.480, 3.762)` y su zona está centrada en
+> `(21.5, 3.75)`. Ese cubo **ya está entregado**, y se comprueba con la cuenta de
 > [más abajo](#cuándo-un-cubo-está-en-su-zona) — no alcanza con que las
 > coordenadas se parezcan.
 
@@ -272,7 +272,8 @@ intercambiables entre sí; lo único que importa es esquivarlos.
 
 **Punto de salida de los robots**, compartido por los dos. Está al **centro del
 lado que va del marcador 0 al 3** —el lado izquierdo mirando la cancha desde
-arriba—, a 2,5 celdas del borde.
+arriba—, a 3,75 celdas del borde: la misma distancia a la que están los centros
+de las tres zonas de acopio del suyo.
 
 > **Ojo, que son dos cosas distintas.** Hasta la v1 la salida coincidía con el
 > **origen (0,0)**, que es el centro del marcador ArUco de menor ID. En la v2 la
@@ -312,7 +313,13 @@ está [más abajo](#cuándo-un-cubo-está-en-su-zona).
 | `length` | float | Lado **largo** de la zona, en celdas. Va **paralelo al borde** donde apoya. |
 | `depth` | float | **Fondo**: cuánto entra la zona desde el borde hacia adentro, en celdas. |
 
-Hoy vale `{ "length": 10.0, "depth": 5.0 }`, o sea **200 × 100 mm**.
+Hoy vale `{ "length": 10.0, "depth": 7.5 }`, o sea **200 × 150 mm**.
+
+> **Léanlo del mensaje, no de acá.** Este número ya cambió una vez: el fondo era
+> de 100 mm y subió a 150 en sep-2026, después de ver en la cancha real que con
+> 100 un cubo bien puesto podía quedar afuera por una rendija. **No subió la
+> versión del protocolo**, porque la forma del mensaje no cambió: el tamaño es un
+> dato, y el que lo lee del mensaje no se enteró de nada.
 
 Es **uno solo para las tres zonas**, y por eso viaja una vez en la raíz del
 mensaje y no repetido en cada `depot`: tres copias del mismo número son tres
@@ -341,7 +348,7 @@ el sistema de visión para mostrarlo en pantalla.
 
 **Primero: sobre qué lado apoya la zona.** No viene en el mensaje, se deduce. La
 zona apoya su lado largo sobre el **borde de la cancha más cercano a su centro**.
-Con los números de esta edición el centro está a **2,5 celdas** de su borde y a
+Con los números de esta edición el centro está a **3,75 celdas** de su borde y a
 **21,5** de los perpendiculares, así que no hay ambigüedad posible.
 
 **Después: el margen de media diagonal.** El centro del cubo tiene que estar a
@@ -356,18 +363,20 @@ Lo que queda es la **ventana de aceptación**: dónde puede caer el centro del c
 | | Zona | Ventana donde cae el centro |
 |---|---|---|
 | A lo **largo** | 200 mm | **115,15 mm** (±57,6 mm desde el centro) |
-| A lo **ancho del fondo** | 100 mm | **15,15 mm** (±7,6 mm desde el centro) |
+| A lo **ancho del fondo** | 150 mm | **65,15 mm** (±32,6 mm desde el centro) |
 
-> ⚠️ **El fondo es angosto: 7,6 mm de tolerancia a cada lado del eje de la zona.**
-> El sistema de visión ubica con un error máximo medido de 1 a 1,6 mm y declara
-> 10 mm como criterio de aceptación, así que el margen existe pero es ajustado.
->
 > **Traducido a la cancha: el cubo va CENTRADO en el fondo de la zona**, a unos
-> 50 mm del borde. Cuidado con el reflejo de "empujarlo hasta el fondo": el
+> 75 mm del borde. Cuidado con el reflejo de "empujarlo hasta el fondo": el
 > borde externo de la zona es **la línea entre los centros de los marcadores**,
 > no el borde de la mesa. Un cubo empujado más allá de esa línea **sobresale de
 > la zona y no cuenta**, aunque a ojo parezca bien puesto. Medido en la cancha
-> real: un cubo pasado 2,2 celdas de esa línea reportó **36 mm** de falta.
+> real: un cubo pasado 1,8 celdas de esa línea reportó **36 mm** de falta.
+>
+> Los 32,6 mm de tolerancia son cómodos, y no siempre lo fueron: con el fondo de
+> 100 mm que tuvo la primera versión de la v2 eran **7,6 mm**, y en la cancha
+> real un cubo bien puesto oscilaba a través de ese límite entre cuadro y
+> cuadro. Por eso la zona se agrandó. **El criterio no se aflojó**: lo que se
+> agranda es la zona, nunca el margen.
 
 Este fragmento corre tal cual, con Python puro y nada importado:
 
@@ -403,10 +412,10 @@ def cubo_en_su_zona(cubo, depot, depot_size, grid, cube_side):
     return falta == 0.0, falta
 ```
 
-Con el cubo verde del mensaje de la [sección 2](#2-el-mensaje) —`(21.480, 2.512)`
-contra una zona centrada en `(21.5, 2.5)`— da `(True, 0.0)`: está entregado. Si
-el mismo cubo estuviera medio celda más abajo, en `row = 3.012`, daría
-`(False, 0.1213)`: le faltarían 0,12 celdas, o sea 2,4 mm.
+Con el cubo verde del mensaje de la [sección 2](#2-el-mensaje) —`(21.480, 3.762)`
+contra una zona centrada en `(21.5, 3.75)`— da `(True, 0.0)`: está entregado. Si
+ese cubo estuviera en `row = 5.5`, o sea 35 mm más adentro de la cancha, daría
+`(False, 0.1213)`: le faltarían 0,12 celdas, 2,4 mm, para entrar.
 
 Está implementado así en [`test_client.py`](test_client.py), listo para copiar.
 
@@ -437,10 +446,10 @@ Los números exactos de esta cancha de 43 × 43 celdas:
 
 | Lugar | Color | Lado | Centro (col, row) | Ocupa en col | Ocupa en row |
 |---|---|---|---|---|---|
-| Acopio | `green` | arriba (0→1) | `(21.5, 2.5)` | 16,5 a 26,5 | 0 a 5 |
-| Acopio | `red` | derecha (1→2) | `(40.5, 21.5)` | 38 a 43 | 16,5 a 26,5 |
-| Acopio | `blue` | abajo (2→3) | `(21.5, 40.5)` | 16,5 a 26,5 | 38 a 43 |
-| Salida | — | izquierda (3→0) | `(2.5, 21.5)` | — | — |
+| Acopio | `green` | arriba (0→1) | `(21.5, 3.75)` | 16,5 a 26,5 | 0 a 7,5 |
+| Acopio | `red` | derecha (1→2) | `(39.25, 21.5)` | 35,5 a 43 | 16,5 a 26,5 |
+| Acopio | `blue` | abajo (2→3) | `(21.5, 39.25)` | 16,5 a 26,5 | 35,5 a 43 |
+| Salida | — | izquierda (3→0) | `(3.75, 21.5)` | — | — |
 
 **Léanlos del mensaje igual.** Están acá para que se entienda la disposición, no
 para que los escriban en el código: si se monta otra cancha, cambian.
@@ -751,16 +760,16 @@ Conectado. Ctrl-C para cortar.
 
 --- primer mensaje: ejemplo de consumo -------------------------
   cancha: 43x43 celdas de 20.0 mm  |  fase: IDLE
-  rover id=10  col=3.94 row=17.45 theta=359.9°  age=0 ms
-  rover id=11  col=4.02 row=25.43 theta=358.5°  age=0 ms
-  zona de acopio: 10.0 x 5.0 celdas (largo x fondo)  |  cubo: 3.0 celdas de lado
-  cubo green en (25.99, 10.10) -> zona arriba (21.50, 2.50)  age=0 ms  [le falta 7.40 celdas]
-  cubo blue  en (14.92, 28.93) -> zona abajo (21.50, 40.50)  age=0 ms  [le falta 11.78 celdas]
-  cubo red   en (32.92, 26.08) -> zona derecha (40.50, 21.50)  age=0 ms  [le falta 7.40 celdas]
-  salida en (2.50, 21.50)
+  rover id=10  col=3.95 row=17.51 theta=0.4°  age=0 ms
+  rover id=11  col=3.97 row=25.46 theta=0.9°  age=0 ms
+  zona de acopio: 10.0 x 7.5 celdas (largo x fondo)  |  cubo: 3.0 celdas de lado
+  cubo green en (26.03, 10.09) -> zona arriba (21.50, 3.75)  age=0 ms  [le falta 4.99 celdas]
+  cubo blue  en (15.02, 28.99) -> zona abajo (21.50, 39.25)  age=0 ms  [le falta 9.35 celdas]
+  cubo red   en (32.96, 26.01) -> zona derecha (39.25, 21.50)  age=0 ms  [le falta 4.94 celdas]
+  salida en (3.75, 21.50)
 ---------------------------------------------------------------
 
-[  2.0s] recibidos=38 invalidos=0 saltos=0 (perdidos=0)  latencia min/prom/max = 0/19/35 ms  age_max=38 ms
+[  2.0s] recibidos=37 invalidos=0 saltos=0 (perdidos=0)  latencia min/prom/max = 2/18/38 ms  age_max=38 ms
 ```
 
 > Los dos rovers arrancan **junto a la salida**, al centro del lado izquierdo, y
@@ -988,10 +997,10 @@ corriendo (Paso 3), corrélo con `python3 mi_cliente.py` y escribí `start` en l
 terminal del simulador. Vas a ver:
 
 ```
-fase=RUNNING  mi rover: col=12.03 row=17.92 theta=359.2
-   cubo green en (26.05, 10.06)  ->  depot (21.50, 2.50)
-   cubo blue  en (14.93, 28.96)  ->  depot (21.50, 40.50)
-   cubo red   en (33.03, 26.14)  ->  depot (40.50, 21.50)
+fase=RUNNING  mi rover: col=11.92 row=17.93 theta=359.2
+   cubo green en (26.05, 10.06)  ->  depot (21.50, 3.75)
+   cubo blue  en (14.93, 28.96)  ->  depot (21.50, 39.25)
+   cubo red   en (33.03, 26.14)  ->  depot (39.25, 21.50)
 ```
 
 **Detalles que importan de ese ejemplo, y por qué:**
@@ -1135,7 +1144,7 @@ tampoco cambian. El código que itera listas y busca por identidad sigue andando
 |---|---|
 | El chequeo `msg["v"] != 1` descarta **todos** los mensajes | Cambiarlo por `!= 2`. Es el síntoma más común: el cliente conecta, no procesa nada y parece que la visión no publica. |
 | Un validador estricto que rechace campos desconocidos | Ahora llegan `depot_size` y `cube_side`. Aceptarlos. |
-| Código que trataba `start` como el **origen (0,0)** | Ya no coinciden. El origen sigue siendo el marcador 0; la salida está en `(2.5, 21.5)`. |
+| Código que trataba `start` como el **origen (0,0)** | Ya no coinciden. El origen sigue siendo el marcador 0; la salida está en `(3.75, 21.5)`. |
 | Código que asumía las zonas **en las esquinas** | Ahora están al centro de los lados. Si estaba escrito leyendo `depots` del mensaje —como pedía la v1— no hay nada que tocar. |
 | Llegar a la zona y soltar el cubo "cerca" del punto | En la v1 la zona era un punto y "cerca" era una decisión de cada equipo. Ahora hay un **criterio exacto** y el cubo tiene que quedar **entero adentro**: ver [la cuenta](#cuándo-un-cubo-está-en-su-zona). |
 

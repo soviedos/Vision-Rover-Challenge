@@ -22,11 +22,14 @@ que es lo que el contrato no puede tener porque no ve la secuencia.
 Por qué hay una permanencia mínima
 ----------------------------------
 El conteo es **en vivo**: cuenta los que están adentro **ahora**, y si un rover
-saca un cubo, la cuenta baja. Pero la ventana de aceptación sobre el fondo de la
-zona es angosta —7,6 mm a cada lado del eje— así que un cubo dejado justo en el
-borde del criterio entra y sale del veredicto con el puro jitter de la
-detección. Sin permanencia, el número saltaría entre 2 y 3 varias veces por
-segundo, y eso en pantalla se lee como un sistema roto.
+saca un cubo, la cuenta baja. Pero un cubo dejado **justo en el borde del
+criterio** entra y sale del veredicto con el puro jitter de la detección, y sin
+permanencia el número saltaría entre 2 y 3 varias veces por segundo, que en
+pantalla se lee como un sistema roto.
+
+No es hipotético: con el fondo de zona de 100 mm que tuvo la primera versión de
+la v2, la ventana medía 15,2 mm sobre ese eje y en la cancha real un cubo bien
+puesto oscilaba entre 5 y 10 mm afuera del límite, cuadro a cuadro.
 
 La permanencia solo demora **entrar**, nunca **salir**. Demorar la salida sería
 peor que el titileo: diría que un cubo está entregado cuando un rover ya se lo

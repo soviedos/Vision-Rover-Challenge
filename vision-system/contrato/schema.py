@@ -101,13 +101,19 @@ CUBE_SIDE_MM = 60.0
 
 #: Tamaño de una zona de acopio, en celdas. `LENGTH` es el lado LARGO, que va
 #: PARALELO al borde de la cancha donde está apoyada la zona; `DEPTH` es el
-#: FONDO, que entra desde ese borde hacia adentro. 10 x 5 celdas = 200 x 100 mm.
+#: FONDO, que entra desde ese borde hacia adentro. 10 x 7,5 celdas = 200 x 150 mm.
 #:
 #: Es UN solo tamaño para las tres zonas, y por eso viaja una sola vez en el
 #: mensaje (`depot_size`) y no repetido en cada depot: tres copias del mismo
 #: número son tres oportunidades de que un día digan cosas distintas.
+#:
+#: Estos números son DATOS, no forma: viajan en cada mensaje y los equipos los
+#: leen de ahí, así que cambiarlos NO sube la versión del protocolo. El fondo
+#: pasó de 100 a 150 mm en sep-2026, después de ver en la cancha real que con
+#: 100 la ventana de aceptación quedaba de 15 mm y un cubo bien puesto podía no
+#: contar. El criterio conservador no se tocó: se agrandó la zona.
 DEPOT_LENGTH_CELLS = 10.0
-DEPOT_DEPTH_CELLS = 5.0
+DEPOT_DEPTH_CELLS = 7.5
 
 #: Los cuatro lados de la cancha, mirándola desde arriba con el marcador 0
 #: arriba a la izquierda. Son nombres internos: NO viajan en el mensaje, porque
@@ -282,8 +288,8 @@ class Depot:
 
     La orientación NO se declara: se deduce. La zona apoya su lado largo sobre
     el borde de la cancha más cercano a su centro (`lado_mas_cercano`). Con los
-    números de esta edición el centro queda a 2,5 celdas de su borde y a 21,5 de
-    los dos perpendiculares, así que la deducción no admite duda. Declararla
+    números de esta edición el centro queda a 3,75 celdas de su borde y a 21,5
+    de los dos perpendiculares, así que la deducción no admite duda. Declararla
     aparte sería un segundo dato que puede contradecir al primero.
 
     Va en una lista separada de `cubes` aunque compartan el color, porque los
@@ -671,12 +677,16 @@ class GeometriaDepot:
     VENTANA: dónde puede estar el centro del cubo para que el cubo entero quede
     adentro, sea cual sea su rotación.
 
-    ⚠️ La ventana del FONDO es angosta. Con una zona de 200 x 100 mm y un cubo
-    de 60 mm, la ventana mide 115,2 x 15,2 mm: a lo ancho del fondo el centro
-    del cubo tiene apenas 7,6 mm de tolerancia a cada lado del eje de la zona, y
-    el sistema de visión declara 10 mm como criterio de precisión. Está al
-    límite. Si en la cancha real el conteo resulta inestable, la salida es subir
-    el fondo de la zona, no aflojar el criterio.
+    Con la zona de 200 x 150 mm y un cubo de 60 mm, la ventana mide
+    115,2 x 65,1 mm: el centro del cubo tiene 32,6 mm de tolerancia a cada lado
+    del eje de la zona sobre el fondo, y 57,6 mm a lo largo.
+
+    Esa holgura es la razón por la que el fondo pasó de 100 a 150 mm. Con 100,
+    la ventana del fondo medía 15,2 mm —7,6 mm a cada lado— y en la cancha real
+    se vio que un cubo bien puesto oscilaba a través de ese límite entre cuadro
+    y cuadro. La media diagonal se lleva 42,4 mm de cada lado y no se negocia:
+    es lo que hace que el veredicto valga para cualquier rotación. Lo que se
+    agranda es la zona.
     """
 
     col: float

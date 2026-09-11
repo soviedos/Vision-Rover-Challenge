@@ -30,7 +30,7 @@
     { "id": 11, "col": 4.0, "row": 25.5, "theta": 0.0 }
   ],
   "_nota_rovers": "El id es el ID del marcador ArUco pegado al robot. Los IDs 0..3 quedan reservados para los cuatro marcadores de esquina, por eso los rovers usan 10 y 11. col/row/theta son la pose inicial. Agregar o quitar entradas cambia la cantidad de rovers sin tocar código.",
-  "_nota_pose_inicial": "Los dos arrancan junto a la salida, que desde el protocolo v2 está al centro del lado izquierdo (2.5, 21.5), y miran hacia adentro de la cancha (theta 0 = hacia col creciente). Quedan simétricos respecto de la salida y separados 8 celdas = 160 mm entre centros: el chasis mide 120 mm de ancho, así que con menos separación se dibujarían montados uno sobre el otro.",
+  "_nota_pose_inicial": "Los dos arrancan junto a la salida, que desde el protocolo v2 está al centro del lado izquierdo (3.75, 21.5), y miran hacia adentro de la cancha (theta 0 = hacia col creciente). Quedan simétricos respecto de la salida y separados 8 celdas = 160 mm entre centros: el chasis mide 120 mm de ancho, así que con menos separación se dibujarían montados uno sobre el otro.",
 
   "velocidad_rover_celdas_s": 6.0,
   "giro_rover_grados_s": 90.0,
@@ -49,20 +49,22 @@
 
   "_POR_QUE_NO_SE_DEJAN_DE_EJEMPLO": "Porque el simulador y la cancha real no pueden decir cosas distintas. Los equipos desarrollan contra esto, y un simulador que emite obstáculos que nunca van a existir hace que veinte equipos escriban lógica de esquive para nada. Si en una edición futura vuelven, se agregan acá y el mensaje deja de traer la lista vacía, sin cambiar el contrato ni avisar nada.",
 
-  "start": { "col": 2.5, "row": 21.5 },
-  "_nota_start": "Punto de salida de los robots, compartido por los dos. Está al CENTRO del lado que va del marcador 0 al 3 —el lado izquierdo mirando la cancha desde arriba—, a 2,5 celdas del borde, que es medio fondo de zona. OJO: el ORIGEN de coordenadas no se movió, sigue siendo el centro del marcador 0 en (0,0). Lo que cambió en v2 es dónde arrancan los robots, no desde dónde se mide.",
+  "start": { "col": 3.75, "row": 21.5 },
+  "_nota_start": "Punto de salida de los robots, compartido por los dos. Está al CENTRO del lado que va del marcador 0 al 3 —el lado izquierdo mirando la cancha desde arriba—, a 3,75 celdas del borde, que es medio fondo de zona: así todos los lugares fijos quedan a la misma distancia de su borde. OJO: el ORIGEN de coordenadas no se movió, sigue siendo el centro del marcador 0 en (0,0). Lo que cambió en v2 es dónde arrancan los robots, no desde dónde se mide.",
 
   "depots": [
-    { "color": "green", "col": 21.5, "row": 2.5 },
-    { "color": "red", "col": 40.5, "row": 21.5 },
-    { "color": "blue", "col": 21.5, "row": 40.5 }
+    { "color": "green", "col": 21.5, "row": 3.75 },
+    { "color": "red", "col": 39.25, "row": 21.5 },
+    { "color": "blue", "col": 21.5, "row": 39.25 }
   ],
-  "depot_size": { "length": 10.0, "depth": 5.0 },
+  "depot_size": { "length": 10.0, "depth": 7.5 },
   "cube_side": 3.0,
 
   "_nota_depots": "Tres zonas de acopio, una por color, al CENTRO de cada uno de los tres lados que NO son el de la salida: verde arriba (lado 0-1), rojo a la derecha (lado 1-2) y azul abajo (lado 2-3). col/row son el CENTRO del rectángulo. La asignación de colores por lado está DECIDIDA y ya no es provisional; lo que sigue vigente es que los equipos NO la asumen: leen depots del mensaje, que para eso viaja en cada uno.",
 
-  "_nota_geometria_zonas": "Cada zona mide 200 x 100 mm = 10 x 5 celdas: el largo va PARALELO al borde y el fondo entra hacia adentro de la cancha. La zona queda entera dentro de la cancha efectiva, con su lado largo apoyado sobre el borde, y por eso el centro está a 2,5 celdas del borde (medio fondo). La ORIENTACIÓN no se declara: se deduce del borde más cercano al centro, que está a 2,5 celdas del suyo y a 21,5 de los perpendiculares.",
+  "_nota_geometria_zonas": "Cada zona mide 200 x 150 mm = 10 x 7,5 celdas: el largo va PARALELO al borde y el fondo entra hacia adentro de la cancha. La zona queda entera dentro de la cancha efectiva, con su lado largo apoyado sobre el borde, y por eso el centro está a 3,75 celdas del borde (medio fondo). La ORIENTACIÓN no se declara: se deduce del borde más cercano al centro, que está a 3,75 celdas del suyo y a 21,5 de los perpendiculares.",
+
+  "_POR_QUE_EL_FONDO_ES_DE_150": "El fondo era de 100 mm y subió a 150 en sep-2026. Con 100, la ventana de aceptación quedaba de 15 mm sobre el fondo —7,6 mm a cada lado del eje— y en la cancha real se vio que un cubo bien puesto podía quedar afuera por una rendija, sobre todo entrando girado. El criterio conservador por media diagonal NO se tocó: es lo que hace que el veredicto valga para cualquier rotación del cubo. Lo que se agranda es la zona. Con 150 la ventana pasa a 65,1 mm. Esto NO sube la versión del protocolo: el tamaño es un DATO que viaja en el mensaje y los equipos lo leen de ahí, así que la forma del mensaje no cambió.",
 
   "_nota_tamanos_en_el_mensaje": "depot_size y cube_side viajan en el mensaje como campos raíz, en celdas, y los equipos los leen de ahí en vez de copiarlos de un documento: el veredicto de 'cubo completamente dentro de su zona' depende de los dos. El tamaño de zona es UNO SOLO para las tres, y por eso va una vez y no repetido en cada depot. Tienen que coincidir con DEPOT_LENGTH_CELLS, DEPOT_DEPTH_CELLS y CUBE_SIDE_MM de schema.py: el simulador lo comprueba al arrancar y se niega a publicar si no.",
 

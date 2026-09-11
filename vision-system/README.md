@@ -484,7 +484,7 @@ Hay **tres cubos**, de colores distintos (verde, azul, rojo), y **tres zonas de
 acopio**, una de cada color, **al centro de cada uno de los tres lados** que no
 son el de la salida. **Cada cubo va a la zona de su color.**
 
-Cada zona es un **rectángulo de 200 × 100 mm** con su lado largo apoyado sobre
+Cada zona es un **rectángulo de 200 × 150 mm** con su lado largo apoyado sobre
 el borde de la cancha, y un cubo cuenta como entregado cuando queda
 **completamente adentro**. Eso es una diferencia de fondo con el punto que eran
 antes: hay un criterio exacto, y el sistema lo muestra en pantalla mientras
@@ -591,18 +591,18 @@ completo, el mismo que aparece en [`contrato/CONTRATO.md`](contrato/CONTRATO.md)
     { "id": 11, "col": 15.265, "row": 28.661, "theta": 40.22, "age_ms": 0 }
   ],
   "cubes": [
-    { "color": "green", "col": 21.480, "row": 2.512,  "age_ms": 0   },
+    { "color": "green", "col": 21.480, "row": 3.762, "age_ms": 0   },
     { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425 },
     { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0   }
   ],
   "obstacles": [],
-  "start":  { "col": 2.5, "row": 21.5 },
+  "start":  { "col": 3.75, "row": 21.5 },
   "depots": [
-    { "color": "green", "col": 21.5, "row": 2.5  },
-    { "color": "red",   "col": 40.5, "row": 21.5 },
-    { "color": "blue",  "col": 21.5, "row": 40.5 }
+    { "color": "green", "col": 21.5,  "row": 3.75  },
+    { "color": "red",   "col": 39.25, "row": 21.5  },
+    { "color": "blue",  "col": 21.5,  "row": 39.25 }
   ],
-  "depot_size": { "length": 10.0, "depth": 5.0 },
+  "depot_size": { "length": 10.0, "depth": 7.5 },
   "cube_side": 3.0
 }
 ```

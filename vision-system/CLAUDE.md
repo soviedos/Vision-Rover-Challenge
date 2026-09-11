@@ -137,12 +137,18 @@ Vision-Rover-Challenge/          # raíz del repositorio (fork)
 - **Obstáculos:** bloques **amarillos de 10 cm**.
   El **amarillo está reservado**: nunca es un cubo.
 - **Zonas de acopio: son TRES, una por color** (`green`, `blue`, `red`),
-  **rectangulares de 200 × 100 mm**, al **centro de cada uno de los tres lados
+  **rectangulares de 200 × 150 mm**, al **centro de cada uno de los tres lados
   que no son el de la salida**: verde arriba (lado 0–1), rojo a la derecha
   (1–2), azul abajo (2–3). **Cada cubo va a la zona de acopio de su color.**
   Decisión confirmada: no hay una zona única compartida.
   - El **largo** va paralelo al borde y el **fondo** entra hacia adentro, así que
-    el centro de cada zona queda a **2,5 celdas** de su borde.
+    el centro de cada zona queda a **3,75 celdas** de su borde. La salida está a
+    esa misma distancia del suyo: todos los lugares fijos, al mismo margen.
+  - El fondo pasó de 100 a 150 mm en sep-2026, por decisión de diseño del reto:
+    con 100 la ventana de aceptación quedaba de 15 mm y un cubo que entraba
+    girado podía quedar afuera por una rendija. **El criterio conservador no se
+    toca; se agranda la zona.** Cambiar estas medidas **no sube la versión del
+    protocolo**: son datos que viajan en el mensaje.
   - **La orientación NO se declara: se deduce** del borde más cercano al centro.
     Un segundo dato declarado podría contradecir al primero.
   - El tamaño es **uno solo para las tres** y viaja una vez en el mensaje

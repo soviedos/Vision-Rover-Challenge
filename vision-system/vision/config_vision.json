@@ -104,36 +104,38 @@
     "_nota_sincronizacion": "⚠️ Estos valores DEBEN coincidir con los de contrato/config_simulador.json. Los equipos desarrollan contra el simulador, así que si dicen cosas distintas, el código que les funciona ahí les falla en la cancha. Es la misma regla que ya rige para la grilla.",
     "_nota_colores": "Cada cubo va al depósito de SU color, y los equipos cruzan las dos listas por `color`. Qué color va en qué lado se declara acá y puede cambiar sin tocar código: por eso el contrato le dice a los equipos que NO lo asuman y lo lean del mensaje.",
     "start": {
-      "col": 2.5,
+      "col": 3.75,
       "row": 21.5
     },
-    "_nota_start": "Punto de salida de los robots, compartido por los dos. Está al CENTRO del lado que va del marcador 0 al 3 —el izquierdo mirando la cancha desde arriba—, a 2,5 celdas del borde, que es medio fondo de zona. OJO: el ORIGEN de coordenadas no se movió; sigue siendo el centro del marcador ID 0 en (0,0). Lo que cambió en el protocolo v2 es dónde arrancan los robots, no desde dónde se mide.",
+    "_nota_start": "Punto de salida de los robots, compartido por los dos. Está al CENTRO del lado que va del marcador 0 al 3 —el izquierdo mirando la cancha desde arriba—, a 3,75 celdas del borde, que es medio fondo de zona: así los cuatro lugares fijos quedan con el mismo margen. OJO: el ORIGEN de coordenadas no se movió; sigue siendo el centro del marcador ID 0 en (0,0). Lo que cambió en el protocolo v2 es dónde arrancan los robots, no desde dónde se mide.",
     "depots": [
       {
         "color": "green",
         "col": 21.5,
-        "row": 2.5
+        "row": 3.75
       },
       {
         "color": "red",
-        "col": 40.5,
+        "col": 39.25,
         "row": 21.5
       },
       {
         "color": "blue",
         "col": 21.5,
-        "row": 40.5
+        "row": 39.25
       }
     ],
     "_nota_depots": "Tres zonas de acopio, una por color, al CENTRO de cada uno de los tres lados que NO son el de la salida: verde arriba (lado 0-1), rojo a la derecha (lado 1-2), azul abajo (lado 2-3). col/row son el CENTRO del rectángulo. Decisión cerrada: no hay una zona única compartida, y eso convierte el reto en un problema de asignación y no solo de transporte. La asignación de color por lado está DECIDIDA y se puede cambiar acá sin tocar código; los equipos igual la leen del mensaje y no la asumen.",
     "tamano_deposito_mm": {
       "largo": 200.0,
-      "fondo": 100.0
+      "fondo": 150.0
     },
-    "_nota_tamano_deposito": "Tamaño de las tres zonas, en milímetros: 200 de LARGO (paralelo al borde donde apoya la zona) por 100 de FONDO (entrando hacia adentro de la cancha). Son 10 x 5 celdas de 20 mm. Es UN solo tamaño para las tres y viaja una sola vez en el mensaje, como `depot_size`, no repetido en cada depot. Tiene que coincidir con DEPOT_LENGTH_CELLS y DEPOT_DEPTH_CELLS de contrato/schema.py, y la revisión de configuración falla si no.",
+    "_nota_tamano_deposito": "Tamaño de las tres zonas, en milímetros: 200 de LARGO (paralelo al borde donde apoya la zona) por 150 de FONDO (entrando hacia adentro de la cancha). Son 10 x 7,5 celdas de 20 mm. Es UN solo tamaño para las tres y viaja una sola vez en el mensaje, como `depot_size`, no repetido en cada depot. Tiene que coincidir con DEPOT_LENGTH_CELLS y DEPOT_DEPTH_CELLS de contrato/schema.py, y la revisión de configuración falla si no.",
     "_NO_SE_MARCAN_EN_EL_TABLERO": "Las tres zonas son VIRTUALES: no se pega ni se pinta nada sobre la cancha. Existen solo como dato declarado acá y como dibujo sobre el video. Es deliberado: el detector de cubos se apoya en que el tablero es ACROMÁTICO —todo lo saturado es un objeto—, y tres rectángulos de color pegados en la cancha serían tres manchas de color permanentes para segmentar. El generador sintético tampoco las dibuja, por la misma razón: simula lo que la cámara ve del tablero físico.",
-    "_LA_VENTANA_DEL_FONDO_ES_ANGOSTA": "⚠️ Un cubo cuenta como 'en posición' cuando su centro está a media diagonal del cubo (60 * raíz(2) / 2 = 42,43 mm) de cada borde de la zona. Con estas medidas la ventana de aceptación queda de 115,2 x 15,2 mm: sobre el eje del FONDO el centro del cubo tiene apenas 7,6 mm de tolerancia a cada lado, y el sistema declara 10 mm como criterio de precisión (precision.umbral_mm). Está al límite, y la revisión de configuración lo levanta como AVISO en cada arranque. Si en la cancha real el conteo resulta inestable, lo que hay que subir es el fondo de la zona —de 100 a 150 mm—, no aflojar el criterio.",
-    "_nota_geometria": "La ORIENTACIÓN de cada zona no se declara: se deduce del borde más cercano a su centro. Cada centro está a 2,5 celdas de su borde y a 21,5 de los perpendiculares, así que no hay ambigüedad. Un segundo dato declarado podría contradecir al primero; uno deducido, no."
+    "_LA_VENTANA_DE_ACEPTACION": "Un cubo cuenta como 'en posición' cuando su centro está a media diagonal del cubo (60 * raíz(2) / 2 = 42,43 mm) de cada borde de la zona. Con estas medidas la ventana de aceptación queda de 115,2 x 65,1 mm: el centro del cubo tiene 32,6 mm de tolerancia a cada lado del eje sobre el FONDO y 57,6 mm a lo largo, contra un criterio de precisión de 10 mm (precision.umbral_mm) y un error de ubicación medido de 1 a 1,6 mm. Con holgura.",
+
+    "_POR_QUE_EL_FONDO_SUBIO_A_150": "El fondo era de 100 mm y la ventana quedaba de 15,2 mm —7,6 mm a cada lado del eje—, que la revisión de configuración levantaba como AVISO en cada arranque. La cancha real le dio la razón al aviso el 11-sep-2026: con los tres cubos puestos y quietos, uno oscilaba entre 5 y 10 mm afuera del límite cuadro a cuadro, así que la permanencia se le reiniciaba y no contaba nunca, y un cubo que entraba girado podía quedar afuera por una rendija. Subió a 150 por decisión de diseño del reto. El criterio conservador por media diagonal NO se tocó: es lo que hace que el veredicto valga para cualquier rotación sin que el equipo tenga que conocerla. Lo que se agranda es la zona. Esto NO sube la versión del protocolo: el tamaño es un dato que viaja en el mensaje.",
+    "_nota_geometria": "La ORIENTACIÓN de cada zona no se declara: se deduce del borde más cercano a su centro. Cada centro está a 3,75 celdas de su borde y a 21,5 de los perpendiculares, así que no hay ambigüedad. Un segundo dato declarado podría contradecir al primero; uno deducido, no."
   },
   "conteo_acopio": {
     "_acerca_de": "Conteo de cubos en posición, que el sistema muestra en pantalla (vision/reglas/acopio.py). NO viaja en el mensaje: la visión informa, no decide. Al completarse los tres, la imagen lo anuncia y la fase la sigue cerrando una persona con `stop`.",

@@ -192,10 +192,12 @@ acopio en una esquina, o más grande que el tablero—. Eso no falla cuando se u
 publica telemetría perfectamente válida y mal, y el equipo que la consume busca
 el problema en su propio código.
 
-Un aviso es algo posible pero **ajustado**. El que hay hoy es el que motivó la
-separación: la ventana donde tiene que caer el centro del cubo mide **15,2 mm**
-sobre el fondo de la zona —7,6 mm a cada lado del eje— contra un criterio de
-precisión de **10 mm**.
+Un aviso es algo posible pero **ajustado**. El que motivó la separación, y que
+hoy ya no aparece, es el mejor ejemplo de para qué sirve: con el fondo de zona
+de 100 mm, la ventana donde tiene que caer el centro del cubo medía **15,2 mm**
+—7,6 mm a cada lado del eje— contra un criterio de precisión de **10 mm**. La
+cancha real le dio la razón: un cubo bien puesto oscilaba a través de ese
+límite. El fondo subió a 150 mm y el aviso se apagó solo.
 
 > **El código de salida solo mira los errores.** Con avisos y sin errores sale
 > 0, para que encadenar esto a otra cosa no se rompa porque una medida quedó

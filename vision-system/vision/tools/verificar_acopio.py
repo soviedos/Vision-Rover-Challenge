@@ -10,7 +10,13 @@ Qué se verifica, y por qué en dos bloques
 -----------------------------------------
 **La matemática** primero, sin imágenes: que el límite de la ventana esté donde
 dice —acepta un pelo adentro, rechaza un micrón afuera— y —lo que de verdad
-importa— que el criterio sea **conservador para cualquier rotación**. Un cubo cuyo centro está justo en
+importa— que el criterio sea **conservador para cualquier rotación**.
+
+**El recorrido** después: que una sola llamada evalúe **las tres zonas**,
+cuenten o no cuenten. Un recorrido que se cortara en la primera zona en posición
+devolvería menos de tres zonas, y en la pantalla eso se ve como un conteo bajo
+sin ninguna explicación. Los dos casos usan las tres zonas a la vez, que es lo
+que ese defecto necesitaría para manifestarse. Un cubo cuyo centro está justo en
 el borde de la ventana tiene que caber entero dentro del rectángulo esté como
 esté girado, y eso se comprueba barriendo el giro y mirando las cuatro esquinas.
 Si esa propiedad no se cumpliera, todo lo demás daría igual: el sistema
@@ -48,6 +54,7 @@ try:  # como paquete
     from ..geometry.coordenadas import (
         ErrorGeometria, construir_sistema, detectar_marcadores, pose_camara,
     )
+    from ..mundo import CuboEnMundo, EstadoMundo
     from ..reglas.acopio import ContadorAcopio
     from ..sources.generador_sintetico import generar
     from ..tracking.seguimiento import Seguidor
@@ -60,6 +67,7 @@ except ImportError:  # como script suelto
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
         ErrorGeometria, construir_sistema, detectar_marcadores, pose_camara,
     )
+    from vision.mundo import CuboEnMundo, EstadoMundo  # type: ignore[no-redef]
     from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
     from vision.sources.generador_sintetico import generar  # type: ignore[no-redef]
     from vision.tracking.seguimiento import Seguidor  # type: ignore[no-redef]
@@ -149,7 +157,92 @@ def verificar_matematica(cfg) -> list[str]:
 
 
 # --------------------------------------------------------------------------
-# Bloque 2 — el sistema entero, sobre imágenes sintéticas
+# Bloque 2 — el recorrido de las TRES zonas, en una sola llamada
+# --------------------------------------------------------------------------
+
+#: Épsilon de los casos de borde, en MILÍMETROS. Es una distancia FÍSICA y no el
+#: épsilon de la coma flotante, a propósito: lo que se prueba es que el límite
+#: esté donde dice sobre la cancha, no cómo redondea el intérprete. Medio
+#: milímetro es la mitad del error de ubicación medido del sistema.
+EPSILON_BORDE_MM = 0.5
+
+#: Las tres posiciones medidas sobre la cancha montada, con los cubos puestos y
+#: quietos, leídas de la telemetría el 11-sep-2026. No son inventadas: son el
+#: caso que hizo dudar del conteo, y por eso quedan como regresión.
+MEDIDOS_EN_CANCHA = {"green": (21.37, 3.15), "red": (40.54, 22.20), "blue": (22.93, 40.26)}
+
+
+def _contar(cfg, posiciones: dict) -> "object":
+    """Evalúa las tres zonas EN UNA SOLA LLAMADA, ya pasada la permanencia.
+
+    Que sea una sola llamada con las tres zonas es el punto de este bloque: un
+    recorrido que se cortara en la primera zona en posición —un `break` de más—
+    devolvería menos de tres zonas y dejaría a las siguientes sin evaluar, y eso
+    en la pantalla se ve como un conteo bajo sin ninguna explicación.
+    """
+    contador = ContadorAcopio(cfg)
+    cubos = tuple(CuboEnMundo(color=color, col=p[0], row=p[1], age_ms=0)
+                  for color, p in sorted(posiciones.items()))
+    permanencia = cfg.conteo_acopio.permanencia_minima_ms
+    contador.actualizar(EstadoMundo(ts_ms=0, fase="RUNNING", cubos=cubos), 0)
+    return contador.actualizar(
+        EstadoMundo(ts_ms=permanencia, fase="RUNNING", cubos=cubos), permanencia)
+
+
+def _apenas_afuera(cfg) -> dict:
+    """Un cubo medio milímetro afuera de la ventana, en cada una de las tres zonas.
+
+    Se corre sobre el eje MÁS ANGOSTO de cada zona, que es el del fondo: es
+    donde el criterio se juega de verdad y donde un error de signo o de eje
+    pasaría inadvertido sobre el eje largo.
+    """
+    cell = cfg.tablero.cell_mm
+    epsilon = EPSILON_BORDE_MM / cell
+    posiciones = {}
+    for color, geo in geometrias_deposito(cfg).items():
+        if geo.ventana_row <= geo.ventana_col:      # zona apoyada arriba o abajo
+            posiciones[color] = (geo.col, geo.row + geo.ventana_row + epsilon)
+        else:                                       # zona apoyada a los costados
+            posiciones[color] = (geo.col + geo.ventana_col + epsilon, geo.row)
+    return posiciones
+
+
+def verificar_recorrido(cfg) -> list[str]:
+    """Que la llamada evalúe las tres zonas, cuenten o no cuenten."""
+    problemas = []
+    colores = set(geometrias_deposito(cfg))
+
+    print("\n  BLOQUE 2 — el recorrido de las tres zonas, en una sola llamada")
+    print("  " + "-" * 74)
+    print("  {:<44} {:>10} {:>10}  {}".format("caso", "esperado", "obtenido", "estado"))
+    print("  " + "-" * 74)
+
+    casos = (
+        ("los tres cubos medidos en la cancha", MEDIDOS_EN_CANCHA, 3),
+        ("uno apenas afuera ({:.1f} mm) en cada zona".format(EPSILON_BORDE_MM),
+         _apenas_afuera(cfg), 0),
+    )
+    for nombre, posiciones, esperado in casos:
+        r = _contar(cfg, posiciones)
+        fallas = []
+        if r.en_posicion != esperado:
+            fallas.append("se esperaban {} y dio {}".format(esperado, r.en_posicion))
+        # La comprobación que caza el recorrido cortado: NO alcanza con que el
+        # número dé, tienen que estar las tres zonas en la respuesta.
+        if {z.color for z in r.zonas} != colores:
+            fallas.append("la llamada devolvió {} y las zonas son {}".format(
+                sorted(z.color for z in r.zonas), sorted(colores)))
+        print("  {:<44} {:>10} {:>10}  {}".format(
+            nombre, "{} de 3".format(esperado), "{} de {}".format(r.en_posicion, r.total),
+            "OK" if not fallas else "FALLA"))
+        for falla in fallas:
+            print("      ✗ {}".format(falla))
+            problemas.append("{}: {}".format(nombre, falla))
+    return problemas
+
+
+# --------------------------------------------------------------------------
+# Bloque 3 — el sistema entero, sobre imágenes sintéticas
 # --------------------------------------------------------------------------
 
 
@@ -220,7 +313,7 @@ def correr_modo(cfg, con_perspectiva: bool, holgura_mm: float) -> bool:
     titulo = ("CON perspectiva (cámara inclinada {:.1f}°)".format(persp.inclinacion_grados)
               if con_perspectiva else "SIN perspectiva (cenital perfecta)")
     print("\n" + "=" * 78)
-    print("BLOQUE 2 — el sistema entero · MODO: {}".format(titulo))
+    print("BLOQUE 3 — el sistema entero · MODO: {}".format(titulo))
     print("=" * 78)
     print("  {:<42} {:>9} {:>10} {:>10}  {}".format(
         "escenario", "esperado", "contados", "peor falta", "estado"))
@@ -303,6 +396,7 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 78)
 
     problemas = verificar_matematica(cfg)
+    problemas += verificar_recorrido(cfg)
     modos = {"ambos": (False, True), "cenital": (False,), "perspectiva": (True,)}[args.modo]
     resultados = [correr_modo(cfg, con_persp, args.holgura_mm) for con_persp in modos]
 

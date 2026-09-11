@@ -361,8 +361,13 @@ Lo que queda es la **ventana de aceptación**: dónde puede caer el centro del c
 > ⚠️ **El fondo es angosto: 7,6 mm de tolerancia a cada lado del eje de la zona.**
 > El sistema de visión ubica con un error máximo medido de 1 a 1,6 mm y declara
 > 10 mm como criterio de aceptación, así que el margen existe pero es ajustado.
-> Traducido a la cancha: **empujen el cubo hasta el fondo de la zona**, no lo
-> dejen apoyado en el borde de adentro.
+>
+> **Traducido a la cancha: el cubo va CENTRADO en el fondo de la zona**, a unos
+> 50 mm del borde. Cuidado con el reflejo de "empujarlo hasta el fondo": el
+> borde externo de la zona es **la línea entre los centros de los marcadores**,
+> no el borde de la mesa. Un cubo empujado más allá de esa línea **sobresale de
+> la zona y no cuenta**, aunque a ojo parezca bien puesto. Medido en la cancha
+> real: un cubo pasado 2,2 celdas de esa línea reportó **36 mm** de falta.
 
 Este fragmento corre tal cual, con Python puro y nada importado:
 

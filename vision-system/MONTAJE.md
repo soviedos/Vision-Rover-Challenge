@@ -250,9 +250,14 @@ dibuja encima de la imagen, con el rectángulo interior de la **ventana de
 aceptación**, que es donde tiene que quedar el centro del cubo para que cuente
 como entregado. Ver la sección 6.
 
-> **Empujar el cubo hasta el fondo.** Sobre el eje del fondo, la ventana deja
-> **7,6 mm** de tolerancia a cada lado del eje de la zona. Un cubo apoyado en el
-> borde de adentro puede no contar; empujado hasta el fondo, cuenta con margen.
+> **El cubo va CENTRADO en el fondo de la zona**, a unos 50 mm del borde: la
+> ventana deja **7,6 mm** de tolerancia a cada lado de esa línea media. Ni
+> apoyado en el borde de adentro, ni empujado contra el de afuera —que es **la
+> línea entre los centros de los marcadores**, no el borde de la mesa—: pasada
+> esa línea el cubo sobresale de la zona y no cuenta.
+>
+> Medido en la cancha real: un cubo empujado 2,2 celdas más allá de esa línea
+> reportó **36 mm** de falta, con el cubo visiblemente apoyado en la zona.
 
 ---
 

@@ -40,13 +40,15 @@ import cv2
 import numpy as np
 
 try:  # como paquete
-    from .configuracion import ConfigVision
+    from .configuracion import ConfigVision, geometrias_deposito
     from .mundo import VERSION_PROTOCOLO
     from .tools.panel import (
         AMBAR, BLANCO, GRIS, ROJO, VERDE, Panel, Tipografia, escala_para, sin_acentos,
     )
 except ImportError:  # como script suelto
-    from vision.configuracion import ConfigVision  # type: ignore[no-redef]
+    from vision.configuracion import (  # type: ignore[no-redef]
+        ConfigVision, geometrias_deposito,
+    )
     from vision.mundo import VERSION_PROTOCOLO  # type: ignore[no-redef]
     from vision.tools.panel import (  # type: ignore[no-redef]
         AMBAR, BLANCO, GRIS, ROJO, VERDE, Panel, Tipografia, escala_para, sin_acentos,
@@ -63,6 +65,18 @@ _ROVER = (0, 220, 255)
 _GRILLA = (90, 90, 90)
 _TEXTO = (255, 255, 255)
 _CUBO_BGR = {"red": (60, 60, 235), "green": (80, 200, 80), "blue": (235, 130, 60)}
+_SALIDA = (200, 200, 200)
+
+#: A partir de qué edad un dato se dibuja como viejo. Estaba escrito tres veces
+#: como literal; ahora se declara una sola, porque el conteo de acopio agregó un
+#: cuarto lugar donde hay que hacerse la misma pregunta y cuatro copias de un
+#: umbral son cuatro formas de que un día digan cosas distintas.
+_EDAD_VIEJA_MS = 200
+
+#: Cuánto tiñe el relleno de una zona. Bajo a propósito: la zona es una ayuda
+#: para el operador, no puede taparle el video, que es lo que de verdad hay que
+#: mirar.
+_ZONA_ALFA = 0.28
 
 
 class Vista:
@@ -76,6 +90,12 @@ class Vista:
         self._proximo = 0.0
         self._tipografia = Tipografia(escala_para(alto_imagen))
         self._abierta = False
+        # Las zonas son lugares DECLARADOS: no cambian entre cuadros, así que se
+        # arman una vez. El sistema de coordenadas sí cambia, y por eso lo que se
+        # recalcula en cada cuadro es solo el paso de celdas a píxeles.
+        self._zonas = geometrias_deposito(cfg)
+        self._salida = (cfg.lugares.start_col, cfg.lugares.start_row)
+        self._sistema_actual = None
 
     def toca_dibujar(self, ahora: float) -> bool:
         """Si ya corresponde refrescar. El bucle no debe dibujar en cada cuadro."""
@@ -94,9 +114,20 @@ class Vista:
         """
         lienzo = imagen.copy() if imagen.ndim == 3 else cv2.cvtColor(imagen, cv2.COLOR_GRAY2BGR)
 
+        # El sistema de coordenadas del cuadro se guarda ACÁ, antes de dibujar
+        # nada. Se guardaba dentro de `_dibujar_esquinas`, que corre después de
+        # la grilla: el primer cuadro salía sin grilla y los siguientes la
+        # dibujaban con la geometría del cuadro ANTERIOR. Con la cámara quieta no
+        # se nota, y con la cámara recién movida —que es justo cuando uno mira la
+        # grilla— dibujaba lo de antes.
+        self._sistema_actual = sistema
+
         if sistema is not None:
             self._dibujar_grilla(lienzo, sistema)
             self._dibujar_esquinas(lienzo, sistema)
+            # Las zonas y la salida van DEBAJO de rovers y cubos: son el fondo
+            # contra el que se mira lo que se mueve, y taparlo sería al revés.
+            self._dibujar_zonas(lienzo, info.get("acopio"))
         if sistema is not None and estado is not None:
             self._dibujar_rovers(lienzo, sistema, estado)
             self._dibujar_cubos(lienzo, sistema, estado)
@@ -148,7 +179,92 @@ class Vista:
             cv2.circle(lienzo, centro, 10, _ESQUINA, 2, cv2.LINE_AA)
             cv2.putText(lienzo, str(id_aruco), (centro[0] + 13, centro[1] - 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, _ESQUINA, 2, cv2.LINE_AA)
-        self._sistema_actual = sistema
+
+    def _rect_celdas(self, lienzo, col, row, semi_col, semi_row):
+        """Las cuatro esquinas de un rectángulo en celdas, ya en píxeles."""
+        esquinas = np.array([
+            [col - semi_col, row - semi_row], [col + semi_col, row - semi_row],
+            [col + semi_col, row + semi_row], [col - semi_col, row + semi_row],
+        ], dtype=np.float64)
+        return self._a_px(lienzo, esquinas)
+
+    def _dibujar_zonas(self, lienzo, acopio) -> None:
+        """Las tres zonas de acopio y la salida, dibujadas sobre la cancha.
+
+        **En la cancha no hay nada pintado**: las zonas son virtuales, y este
+        dibujo es la única forma de verlas. Por eso incluye el rectángulo
+        interior de la VENTANA DE ACEPTACIÓN, que es donde tiene que caer el
+        centro del cubo para que el cubo entero quede adentro. Con la zona sola,
+        el operador ve un cubo pisando el borde y no puede saber si entró; con la
+        ventana, lo ve.
+
+        El relleno se compone en una sola pasada sobre la imagen entera. Parece
+        caro y no lo es: la copia solo difiere dentro de los rectángulos, así que
+        la mezcla es idéntica a la original en todo el resto.
+        """
+        estados = {z.color: z for z in acopio.zonas} if acopio is not None else {}
+
+        capa = lienzo.copy()
+        pintada = False
+        for color, geo in sorted(self._zonas.items()):
+            rect = self._rect_celdas(lienzo, geo.col, geo.row, geo.semi_col, geo.semi_row)
+            if rect is None:
+                continue
+            contado = bool(estados.get(color) and estados[color].contado)
+            base = _CUBO_BGR.get(color, (200, 200, 200))
+            # La zona que ya tiene su cubo se pinta con el color pleno; las que
+            # faltan, apagadas. El estado se lee por color antes que por texto.
+            relleno = base if contado else tuple(int(v * 0.45) for v in base)
+            cv2.fillPoly(capa, [np.array(rect, np.int32).reshape(-1, 1, 2)], relleno)
+            pintada = True
+        if pintada:
+            cv2.addWeighted(capa, _ZONA_ALFA, lienzo, 1 - _ZONA_ALFA, 0, lienzo)
+
+        for color, geo in sorted(self._zonas.items()):
+            rect = self._rect_celdas(lienzo, geo.col, geo.row, geo.semi_col, geo.semi_row)
+            ventana = self._rect_celdas(lienzo, geo.col, geo.row, geo.ventana_col, geo.ventana_row)
+            centro = self._a_px(lienzo, np.array([[geo.col, geo.row]]))
+            if rect is None or centro is None:
+                continue
+            z = estados.get(color)
+            contado = bool(z and z.contado)
+            color_bgr = _CUBO_BGR.get(color, (200, 200, 200))
+
+            cv2.polylines(lienzo, [np.array(rect, np.int32).reshape(-1, 1, 2)], True,
+                          color_bgr, 3 if contado else 2, cv2.LINE_AA)
+            if ventana is not None:
+                cv2.polylines(lienzo, [np.array(ventana, np.int32).reshape(-1, 1, 2)], True,
+                              color_bgr, 1, cv2.LINE_AA)
+            cv2.drawMarker(lienzo, centro[0], color_bgr, cv2.MARKER_CROSS, 14, 1)
+
+            # La etiqueta se ancla en una ESQUINA de la zona, sobre el borde
+            # donde apoya, y no en su centro ni en el medio de ese borde. El
+            # motivo se vio dibujando: el cubo entregado queda en el centro de la
+            # zona con su propia etiqueta, y las dos se tapaban justo en el
+            # momento que la zona importa —"EN POSICION" quedaba ilegible—. Desde
+            # la esquina hay media zona de distancia, unas cinco celdas.
+            ancla = {
+                "arriba": (geo.col - geo.semi_col, geo.row - geo.semi_row),
+                "abajo": (geo.col - geo.semi_col, geo.row + geo.semi_row),
+                "izquierda": (geo.col - geo.semi_col, geo.row - geo.semi_row),
+                "derecha": (geo.col + geo.semi_col, geo.row - geo.semi_row),
+            }.get(geo.lado, (geo.col, geo.row))
+            punto = self._a_px(lienzo, np.array([list(ancla)]))
+            if punto is None:
+                continue
+            # La edad solo se muestra si el cubo cuenta y el dato ya está viejo:
+            # ahí el veredicto se apoya en una posición CONSERVADA —el rover que
+            # entregó el cubo lo está tapando— y quien mira tiene que saberlo.
+            edad = z.edad_cubo_ms if (contado and z.edad_cubo_ms > _EDAD_VIEJA_MS) else 0
+            self._etiqueta(lienzo, punto[0],
+                           "{}{}".format(color, " · EN POSICIÓN" if contado else ""),
+                           "({:.2f}, {:.2f})".format(geo.col, geo.row), edad, color_bgr)
+
+        salida = self._a_px(lienzo, np.array([list(self._salida)]))
+        if salida is not None:
+            cv2.drawMarker(lienzo, salida[0], _SALIDA, cv2.MARKER_TILTED_CROSS, 16, 2)
+            self._etiqueta(lienzo, salida[0], "salida",
+                           "({:.2f}, {:.2f})".format(*self._salida), 0, _SALIDA)
 
     def _dibujar_rovers(self, lienzo, sistema, estado) -> None:
         for r in estado.rovers:
@@ -158,7 +274,7 @@ class Vista:
             rad = math.radians(r.theta_grados)
             punta = self._a_px(lienzo, np.array(
                 [[r.col + 3.0 * math.cos(rad), r.row - 3.0 * math.sin(rad)]]))
-            viejo = r.age_ms > 200
+            viejo = r.age_ms > _EDAD_VIEJA_MS
             color = AMBAR[::-1] if viejo else _ROVER
             if punta is not None:
                 cv2.arrowedLine(lienzo, centro[0], punta[0], color, 2, cv2.LINE_AA, tipLength=0.3)
@@ -179,7 +295,7 @@ class Vista:
             if px is None or centro is None:
                 continue
             color = _CUBO_BGR.get(c.color, (200, 200, 200))
-            if c.age_ms > 200:
+            if c.age_ms > _EDAD_VIEJA_MS:
                 color = AMBAR[::-1]
             cv2.polylines(lienzo, [np.array(px, np.int32).reshape(-1, 1, 2)], True,
                           color, 2, cv2.LINE_AA)
@@ -242,6 +358,12 @@ class Vista:
             panel.destacado("DATOS SINTÉTICOS", ROJO, "no es la cancha real")
         panel.destacado(info.get("fase", "IDLE"), VERDE if info.get("fase") == "RUNNING" else BLANCO,
                         "{} cliente(s) conectado(s)".format(info.get("clientes", 0)))
+        acopio = info.get("acopio")
+        if acopio is not None and acopio.completo:
+            # Anuncia, no arbitra: la fase la sigue cerrando una persona.
+            panel.destacado("RETO COMPLETADO", VERDE,
+                            "los {} cubos en su zona · la ronda la cierra el operador "
+                            "con stop".format(acopio.total))
         panel.separador()
 
         visibles = info.get("esquinas_visibles", 0)
@@ -261,7 +383,11 @@ class Vista:
             edades = [o.age_ms for o in tuple(estado.rovers) + tuple(estado.cubos)]
             peor = max(edades) if edades else 0
             panel.estado("Edad máxima", "{} ms".format(peor),
-                         VERDE if peor < 200 else AMBAR)
+                         VERDE if peor < _EDAD_VIEJA_MS else AMBAR)
+
+        if acopio is not None and acopio.total:
+            panel.estado("Acopio", "{} de {} en posición".format(
+                acopio.en_posicion, acopio.total), VERDE if acopio.completo else BLANCO)
 
         panel.separador()
         panel.datos("proceso {:.1f} fps · publicación {} msg".format(

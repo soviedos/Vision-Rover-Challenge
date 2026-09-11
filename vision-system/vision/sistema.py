@@ -44,7 +44,7 @@ import threading
 import time
 
 try:  # como paquete
-    from .configuracion import CONFIG_POR_DEFECTO, ConfigVision, cargar_config
+    from .configuracion import CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config
     from .detectors.cubos import detectar_cubos
     from .detectors.rovers import detectar_rovers
     from .geometry.coordenadas import (
@@ -56,13 +56,14 @@ try:  # como paquete
     from .mundo import FASES, VERSION_PROTOCOLO
     from .publish.puerto import ErrorPuerto
     from .publish.telemetria import PublicadorTelemetria
+    from .reglas.acopio import ContadorAcopio
     from .tracking.seguimiento import Seguidor
     from .vista import Vista
     from .sources.camara import ErrorCamara, FuenteCamara
     from .sources.generador_sintetico import FuenteSintetica
 except ImportError:  # como script suelto
     from vision.configuracion import (  # type: ignore[no-redef]
-        CONFIG_POR_DEFECTO, ConfigVision, cargar_config,
+        CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config,
     )
     from vision.detectors.cubos import detectar_cubos  # type: ignore[no-redef]
     from vision.detectors.rovers import detectar_rovers  # type: ignore[no-redef]
@@ -75,6 +76,7 @@ except ImportError:  # como script suelto
     from vision.mundo import FASES, VERSION_PROTOCOLO  # type: ignore[no-redef]
     from vision.publish.puerto import ErrorPuerto  # type: ignore[no-redef]
     from vision.publish.telemetria import PublicadorTelemetria  # type: ignore[no-redef]
+    from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
     from vision.tracking.seguimiento import Seguidor  # type: ignore[no-redef]
     from vision.vista import Vista  # type: ignore[no-redef]
     from vision.sources.camara import ErrorCamara, FuenteCamara  # type: ignore[no-redef]
@@ -250,6 +252,7 @@ def main(argv: list[str] | None = None) -> int:
 
     arbitro = Arbitro(args.fase)
     seguidor = Seguidor(cfg)
+    contador = ContadorAcopio(cfg)
     anclaje = AnclajeCancha(cfg)
     descartados: set[int] = set()
     vista = None
@@ -272,6 +275,10 @@ def main(argv: list[str] | None = None) -> int:
     print("Cancha: {}x{} celdas de {:.0f} mm".format(
         cfg.tablero.cols, cfg.tablero.rows, cfg.tablero.cell_mm))
     print("Comandos: ready | start | stop | quit")
+    for aviso in avisos_config(cfg):
+        # No impiden arrancar —para eso está `revisar_config`— pero tienen que
+        # verse. El detalle completo, con `python -m vision.tools.verificar_config`.
+        print("[aviso] {}".format(aviso))
     print("=" * 70)
 
     try:
@@ -290,6 +297,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cuadros = fallos = 0
     ultimo_estado = None
+    acopio = None
     ultimo_error = ""
     proximo_informe = time.monotonic() + 5.0
     fin = time.monotonic() + args.duracion if args.duracion > 0 else float("inf")
@@ -311,6 +319,14 @@ def main(argv: list[str] | None = None) -> int:
                     cuadro, cfg, matriz, arbitro.fase, seguidor, anclaje, descartados)
                 publicador.actualizar(estado)
                 ultimo_estado = estado
+                # El conteo va DESPUÉS de publicar y en su propio try: es para
+                # la pantalla, no para el contrato, así que un error suyo no
+                # puede frenar la telemetría ni tumbar la ronda. Si falla, se
+                # conserva la última cuenta buena, igual que todo lo demás.
+                try:
+                    acopio = contador.actualizar(estado, estado.ts_ms)
+                except Exception as exc:  # noqa: BLE001 — a propósito
+                    ultimo_error = "acopio: {}: {}".format(type(exc).__name__, exc)
             except ErrorGeometria as exc:
                 fallos += 1
                 ultimo_error = str(exc).split(".")[0]
@@ -323,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
                 vista.dibujar(cuadro.imagen, sistema_actual, ultimo_estado, {
                     "fase": arbitro.fase, "sintetico": args.sintetico,
                     "clientes": publicador.clientes, "emitidos": publicador.emitidos,
+                    "acopio": acopio,
                     "fps": fuente.fps_real, "fallos": fallos,
                     "esquinas_visibles": anclaje.esquinas_visibles,
                     "desvio_mm": anclaje.desvio_mm,
@@ -337,11 +354,13 @@ def main(argv: list[str] | None = None) -> int:
                 proximo_informe += 5.0
                 edad = publicador.edad_del_estado_ms()
                 print("[estado] fase={} cuadros={} fallos={} emitidos={} clientes={} "
-                      "pisados={} fps={:.1f} edad={} conservados={}/{}".format(
+                      "pisados={} fps={:.1f} edad={} conservados={}/{} acopio={}".format(
                           arbitro.fase, cuadros, fallos, publicador.emitidos,
                           publicador.clientes, publicador.pisados, fuente.fps_real,
                           "{} ms".format(edad) if edad is not None else "sin estado",
-                          seguidor.conservados_rover, seguidor.conservados_cubo),
+                          seguidor.conservados_rover, seguidor.conservados_cubo,
+                          "{}/{}".format(acopio.en_posicion, acopio.total)
+                          if acopio is not None else "sin datos"),
                       flush=True)
                 if descartados:
                     print("[aviso] marcadores vistos que NO son ni esquina ni rover "

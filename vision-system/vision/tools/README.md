@@ -127,6 +127,48 @@ Se prueba con **cuadros generados y procesados de punta a punta**, no con
 detecciones escritas a mano: así se ejercitan detección, confiabilidad y memoria
 juntas, en vez de comprobar solo que un diccionario recuerda cosas.
 
+### `verificar_acopio.py`
+
+Verifica la regla de entrega del reto: **¿el cubo está completamente dentro de
+su zona?**
+
+```bash
+python -m vision.tools.verificar_acopio
+python -m vision.tools.verificar_acopio --holgura-mm 5
+python -m vision.tools.verificar_acopio --modo cenital
+```
+
+Corre en **dos bloques**, y el primero es el que sostiene todo lo demás.
+
+**Bloque 1 — el criterio, sin imágenes.** Que el límite de la ventana esté donde
+dice, y sobre todo que el criterio sea **conservador para cualquier rotación**:
+con el centro del cubo parado en el borde de la ventana, sus cuatro esquinas
+tienen que caer dentro de la zona esté como esté girado. Se barre el giro de 0°
+a 90° sobre los cuatro bordes de las tres zonas. Si esa propiedad no se
+cumpliera, el sistema daría por entregado un cubo que sobresale.
+
+> **El borde exacto no se prueba, y es a propósito.** No se puede representar:
+> `21.5 + 2.8786796564403576 − 21.5` devuelve dos milésimas de femtocelda de
+> más —4 × 10⁻¹⁴ mm— así que una desigualdad cae de un lado o del otro según la
+> zona y el eje. Probar ese punto mediría la coma flotante. Lo que se prueba es
+> **un pelo adentro** y **un micrón afuera**, que es la frontera que existe.
+
+**Bloque 2 — el sistema entero**, sobre imágenes sintéticas y en los dos modos
+de cámara: los cubos en el centro de su zona, justo adentro del criterio, justo
+afuera, y girados 45°. Acá no se prueba una fórmula sino la cadena completa
+—detección de color y ajuste de la base incluidos—, que es donde entra el error
+real de ubicación.
+
+Cada veredicto positivo se comprueba además **contra la verdad del generador**:
+que el cubo que el sistema dio por entregado esté de verdad entero dentro del
+rectángulo, no solo que el número detectado sea coherente.
+
+| Por qué la holgura | |
+|---|---|
+| "Justo adentro" y "justo afuera" no pueden ser *exactamente* el límite | el detector ubica con ~1 mm de error, y un cubo a cero del límite caería de un lado o del otro según el ruido: la prueba mediría la detección y no el criterio |
+| Por defecto son **3 mm** | tres veces ese error |
+| "Justo afuera" empuja **hacia adentro de la cancha** | es el error que ocurre de verdad en una ronda: el rover no terminó de empujar el cubo hasta el fondo de la zona |
+
 ### `verificar_config.py`
 
 Revisa `config_vision.json` **antes** de que importe, y muestra lo que el

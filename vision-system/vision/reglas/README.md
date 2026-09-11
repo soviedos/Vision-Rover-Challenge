@@ -66,6 +66,22 @@ observación fresca, `EstadoZona` expone la **edad** del cubo y la vista la
 muestra cuando pasa a ser vieja. Quien mira la pantalla tiene que poder saber
 sobre qué se apoya lo que está viendo.
 
+## Verificado
+
+Con `python -m vision.tools.verificar_acopio`, en dos bloques:
+
+| Bloque | Qué comprueba |
+|---|---|
+| **El criterio, sin imágenes** | que el límite de la ventana esté donde dice, y que con el centro del cubo en ese límite el cubo entre entero **girado como esté** (0° a 90°, cuatro bordes, tres zonas) |
+| **El sistema entero** | cubos en el centro, justo adentro, justo afuera y girados 45°, procesando el cuadro completo en los dos modos de cámara |
+
+Cada veredicto positivo se contrasta además **contra la verdad del generador**:
+que el cubo dado por entregado esté de verdad entero dentro del rectángulo.
+
+El antirrebote se verifica aparte, con estados escritos a mano: un cubo que
+entra y no se sostiene no cuenta, uno que se sostiene cuenta, uno que sale
+descuenta de inmediato, y uno tapado sigue contando con su edad creciendo.
+
 ## La visión informa, no arbitra
 
 Cuando los tres cubos están en posición, la imagen lo anuncia. **La fase no

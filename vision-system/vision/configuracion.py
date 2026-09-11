@@ -1052,19 +1052,32 @@ def avisos_config(cfg: ConfigVision) -> list[str]:
 
     cell_mm = cfg.tablero.cell_mm
     umbral_mm = cfg.precision.umbral_mm
-    for color, geo in sorted(geometrias.items()):
+    tam = cfg.lugares.tamano_deposito
+
+    # Un aviso por MEDIDA, no uno por zona. Las tres zonas miden lo mismo, así
+    # que repetir el mismo párrafo tres veces no agrega ni un dato y entrena a
+    # saltear los avisos, que es exactamente lo contrario de para qué existen.
+    # Por eso se nombran juntas las afectadas y el número se dice una vez.
+    ajustadas = {}
+    for color, geo in geometrias.items():
         tolerancia_mm = min(geo.ventana_col, geo.ventana_row) * cell_mm
         if tolerancia_mm < umbral_mm:
-            avisos.append(
-                "la zona {} deja una ventana de aceptación de {:.1f} x {:.1f} mm, o sea "
-                "{:.1f} mm de tolerancia a cada lado del eje sobre el fondo, y el criterio "
-                "de precisión del sistema es de {:.0f} mm (precision.umbral_mm). El conteo "
-                "de cubos en posición queda AL LÍMITE: si en la cancha real resulta "
-                "inestable, hay que subir el fondo de la zona —de {:.0f} a 150 mm—, no "
-                "aflojar el criterio".format(
-                    color, geo.ventana_col * 2.0 * cell_mm, geo.ventana_row * 2.0 * cell_mm,
-                    tolerancia_mm, umbral_mm, cfg.lugares.tamano_deposito.fondo_mm)
-            )
+            ajustadas[color] = (tolerancia_mm, geo)
+    if ajustadas:
+        peor = min(ajustadas, key=lambda c: ajustadas[c][0])
+        tolerancia_mm, geo = ajustadas[peor]
+        ventana_largo_mm = (tam.largo_celdas(cell_mm) - 2 * geo.margen) * cell_mm
+        ventana_fondo_mm = (tam.fondo_celdas(cell_mm) - 2 * geo.margen) * cell_mm
+        avisos.append(
+            "zonas {}: la ventana de aceptación queda de {:.1f} mm a lo largo por {:.1f} mm "
+            "sobre el FONDO, o sea {:.1f} mm de tolerancia a cada lado del eje de la zona, "
+            "contra un criterio de precisión de {:.0f} mm (precision.umbral_mm). El conteo "
+            "de cubos en posición queda AL LÍMITE: si en la cancha real resulta inestable, "
+            "hay que subir el fondo de la zona —de {:.0f} a 150 mm—, no aflojar el "
+            "criterio".format(
+                ", ".join(sorted(ajustadas)), ventana_largo_mm, ventana_fondo_mm,
+                tolerancia_mm, umbral_mm, tam.fondo_mm)
+        )
     if cfg.conteo_acopio.permanencia_minima_ms == 0:
         avisos.append(
             "conteo_acopio.permanencia_minima_ms está en 0: el contador va a titilar "

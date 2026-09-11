@@ -127,6 +127,44 @@ Se prueba con **cuadros generados y procesados de punta a punta**, no con
 detecciones escritas a mano: así se ejercitan detección, confiabilidad y memoria
 juntas, en vez de comprobar solo que un diccionario recuerda cosas.
 
+### `verificar_config.py`
+
+Revisa `config_vision.json` **antes** de que importe, y muestra lo que el
+sistema entendió de lo que ahí dice.
+
+```bash
+python -m vision.tools.verificar_config
+python -m vision.tools.verificar_config --config otra_config.json
+```
+
+Responde **dos preguntas distintas**, y esa separación es el punto de la
+herramienta:
+
+| | Quién lo decide | Qué pasa |
+|---|---|---|
+| **¿Es posible?** | `revisar_config` | Si no, el sistema **no arranca** |
+| **¿Es además razonable?** | `avisos_config` | Avisa y **deja arrancar** |
+
+Un error es una configuración que describe una cancha que no existe —una zona de
+acopio en una esquina, o más grande que el tablero—. Eso no falla cuando se usa:
+publica telemetría perfectamente válida y mal, y el equipo que la consume busca
+el problema en su propio código.
+
+Un aviso es algo posible pero **ajustado**. El que hay hoy es el que motivó la
+separación: la ventana donde tiene que caer el centro del cubo mide **15,2 mm**
+sobre el fondo de la zona —7,6 mm a cada lado del eje— contra un criterio de
+precisión de **10 mm**.
+
+> **El código de salida solo mira los errores.** Con avisos y sin errores sale
+> 0, para que encadenar esto a otra cosa no se rompa porque una medida quedó
+> justa. Un aviso que bloqueara el arranque terminaría borrado por quien tiene
+> una ronda esperando; un error que solo avisara, ignorado hasta que sea tarde.
+
+Lo que imprime es **lo deducido, no lo escrito**: el lado sobre el que apoya
+cada zona no está declarado en ninguna parte —sale del borde más cercano a su
+centro— y verlo acá es la forma de confirmar que salió el que uno esperaba,
+antes de tener la cancha montada.
+
 ### `medir_desfases.py`
 
 Mide los **dos desfases entre el marcador y el robot** usando el propio sistema

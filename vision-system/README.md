@@ -167,7 +167,7 @@ rover que decide girar:
   └──────┬──────┘    └─────────────┘
          │
          │  TCP · puerto 2026 · NDJSON (un JSON por línea)
-         │  {"v":1,"seq":4137,"ts_ms":...,"phase":"RUNNING","rovers":[...]}
+         │  {"v":2,"seq":4137,"ts_ms":...,"phase":"RUNNING","rovers":[...]}
          │
     ─────┼──────────────────────────────────────────────────────────────────
          ▼
@@ -355,6 +355,9 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
         ├── tracking/                # productor: identidad, oclusión y edad
         │   └── seguimiento.py       #   memoria entre cuadros
         │
+        ├── reglas/                  # decidir, no detectar: la regla del reto
+        │   └── acopio.py            #   cubos en posición, con permanencia
+        │
         ├── publish/                 # consumidor: a la red
         │   └── telemetria.py        #   reloj propio, último estado bueno
         │
@@ -370,6 +373,8 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
         │   ├── verificar_rovers.py      # rovers contra verdad conocida
         │   ├── verificar_cubos.py       # cubos contra verdad conocida
         │   ├── verificar_seguimiento.py # oclusión y edad
+        │   ├── verificar_acopio.py      # ¿el cubo está dentro de su zona?
+        │   ├── verificar_config.py      # la configuración: errores y avisos
         │   └── panel.py                 # el panel que dibujan las demás
         │
         ├── calibraciones/           # DATOS: un perfil por cámara calibrada
@@ -476,8 +481,20 @@ coordenadas: un sesgo ahí no afecta a un objeto, los corre a todos.
 ### Por qué tres zonas de acopio, una por color
 
 Hay **tres cubos**, de colores distintos (verde, azul, rojo), y **tres zonas de
-acopio**, una de cada color, en las tres esquinas que no son la de salida.
-**Cada cubo va a la zona de su color.**
+acopio**, una de cada color, **al centro de cada uno de los tres lados** que no
+son el de la salida. **Cada cubo va a la zona de su color.**
+
+Cada zona es un **rectángulo de 200 × 100 mm** con su lado largo apoyado sobre
+el borde de la cancha, y un cubo cuenta como entregado cuando queda
+**completamente adentro**. Eso es una diferencia de fondo con el punto que eran
+antes: hay un criterio exacto, y el sistema lo muestra en pantalla mientras
+corre la ronda.
+
+Las tres son **virtuales**: no se pega ni se pinta nada sobre el tablero. No es
+comodidad, es una condición de la detección: los cubos se encuentran porque
+**todo lo que tiene color saturado sobre un tablero acromático es un objeto del
+juego**, y tres rectángulos de color pegados en la cancha serían tres manchas
+permanentes compitiendo con los cubos.
 
 Esto convierte el reto en un problema de **asignación**, no solo de transporte:
 los equipos tienen que decidir qué rover lleva qué cubo y en qué orden, en vez de
@@ -564,27 +581,29 @@ completo, el mismo que aparece en [`contrato/CONTRATO.md`](contrato/CONTRATO.md)
 
 ```json
 {
-  "v": 1,
+  "v": 2,
   "seq": 4137,
   "ts_ms": 1785012345678,
   "phase": "RUNNING",
   "grid": { "cols": 43, "rows": 43, "cell_mm": 20.0 },
   "rovers": [
-    { "id": 10, "col": 4.302,  "row": 3.705,  "theta": 46.20, "age_ms": 0 },
+    { "id": 10, "col": 18.402, "row": 6.705,  "theta": 84.20, "age_ms": 0 },
     { "id": 11, "col": 15.265, "row": 28.661, "theta": 40.22, "age_ms": 0 }
   ],
   "cubes": [
-    { "color": "green", "col": 25.968, "row": 9.999,  "age_ms": 0   },
+    { "color": "green", "col": 21.480, "row": 2.512,  "age_ms": 0   },
     { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425 },
     { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0   }
   ],
   "obstacles": [],
-  "start":  { "col": 2.5, "row": 2.5 },
+  "start":  { "col": 2.5, "row": 21.5 },
   "depots": [
-    { "color": "green", "col": 40.5, "row": 2.5  },
-    { "color": "blue",  "col": 2.5,  "row": 40.5 },
-    { "color": "red",   "col": 40.5, "row": 40.5 }
-  ]
+    { "color": "green", "col": 21.5, "row": 2.5  },
+    { "color": "red",   "col": 40.5, "row": 21.5 },
+    { "color": "blue",  "col": 21.5, "row": 40.5 }
+  ],
+  "depot_size": { "length": 10.0, "depth": 5.0 },
+  "cube_side": 3.0
 }
 ```
 
@@ -755,7 +774,7 @@ Para ver la imagen que generó:
 .venv/bin/python -m vision.tools.verificar_geometria --salida /tmp/tablero.png --anotar
 ```
 
-### Las cuatro verificaciones contra verdad conocida
+### Las verificaciones contra verdad conocida
 
 Cada etapa tiene la suya. Todas corren **sin cámara** y devuelven código de
 salida distinto de cero si algo se sale de umbral, así que sirven igual para
@@ -766,8 +785,15 @@ mirarlas a mano o para encadenarlas.
 .venv/bin/python -m vision.tools.verificar_rovers         # posición y ángulo
 .venv/bin/python -m vision.tools.verificar_cubos          # color, base y oclusión
 .venv/bin/python -m vision.tools.verificar_seguimiento    # memoria, oclusión y edad
+.venv/bin/python -m vision.tools.verificar_acopio         # ¿el cubo está en su zona?
+.venv/bin/python -m vision.tools.verificar_config         # la configuración declarada
 .venv/bin/python -m vision.tools.medir_desfases --autoprueba
 ```
+
+`verificar_config` es la única que no compara contra la verdad del generador:
+revisa lo que declara la configuración y separa lo **imposible** —que impide
+arrancar— de lo **ajustado**, que avisa y deja seguir. Sale con código distinto
+de cero solo ante errores, nunca ante avisos.
 
 Ese último no es una verificación del sistema sino de **la matemática de la
 herramienta de desfases**: le inyecta un desfase conocido al generador y
@@ -804,7 +830,8 @@ va engrosando. Así siempre hay algo que funciona y se puede verificar.
 
 | Pieza | Qué hace |
 |---|---|
-| **El contrato** (`contrato/`) | Formato definido, validador, simulador con patologías reales, cliente de referencia y manual completo. Protocolo **v1**. |
+| **El contrato** (`contrato/`) | Formato definido, validador, simulador con patologías reales, cliente de referencia y manual completo. Protocolo **v2**: zonas de acopio rectangulares, salida al centro del lado, y la geometría del acopio compartida con los equipos. |
+| **La regla de acopio** (`vision/reglas/`) | Cuenta los cubos completamente dentro de su zona, con permanencia mínima para que el número no titile. El veredicto sale del contrato, así que la pantalla y el rover dicen lo mismo. No se publica ni cambia la fase. |
 | **Generador sintético** (`vision/sources/`) | Crea imágenes del tablero con marcadores y rovers, **conociendo la verdad** de lo que dibujó. |
 | **Captura real** (`vision/sources/`) | Lee la webcam USB en un hilo propio que **nunca bloquea**, con exposición, enfoque y balance de blancos fijos —y **verificados por efecto**, porque muchas cámaras aceptan el ajuste y siguen haciendo lo que quieren—. Incluye un menú para elegir qué cámara abrir. |
 | **Geometría de esquinas** (`vision/geometry/`) | Detecta los 4 marcadores y convierte píxeles a celdas. Verificado contra la verdad del generador sintético, con los marcadores de **100 mm** reales: **exacto** con la cámara cenital y **0,44 mm** de error máximo con la cámara inclinada. El centro de cada marcador sale de **cruzar sus diagonales** y no de promediar sus esquinas (ver más abajo). |
@@ -817,7 +844,7 @@ va engrosando. Así siempre hay algo que funciona y se puede verificar.
 | **Publicación** (`vision/publish/`) | TCP/NDJSON en el 2026, con reloj propio y último-valor-gana. El transporte lo comparte con el simulador. |
 | **El sistema completo** (`vision/sistema.py`) | El programa que se enciende: elige la fuente, corre el bucle, falla abierto y arbitra las fases. |
 | **La vista en vivo** (`vision/vista.py`) | Ventana con la imagen y lo detectado encima, etiquetado con la celda publicada. Es un consumidor: solo lee y no le cuesta nada al procesamiento. |
-| **Herramientas de puesta a punto** (`vision/tools/`) | Nueve: diagnóstico de cámara, generación de los PDF, calibración, medición de precisión, medición de desfases, y cuatro verificaciones contra verdad conocida —geometría, rovers, cubos y seguimiento—. |
+| **Herramientas de puesta a punto** (`vision/tools/`) | Once: diagnóstico de cámara, generación de los PDF, calibración, medición de precisión, medición de desfases, revisión de la configuración, y cinco verificaciones contra verdad conocida —geometría, rovers, cubos, seguimiento y acopio—. |
 
 **Precisión medida sobre hardware real.** El criterio era **error máximo por
 debajo de 10 mm** —un cubo mide 60 mm, así que 10 mm mantiene el objetivo dentro

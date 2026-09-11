@@ -86,8 +86,11 @@ Vision-Rover-Challenge/          # raíz del repositorio (fork)
 - **Puerto: `2026`.** Es el puerto oficial. El simulador del contrato y el sistema
   real publican en el **mismo** puerto, para que un equipo pase del simulador a la
   cancha sin tocar su código.
-- **Versión de protocolo: `v1`.** Viaja en el campo `v` de cada mensaje.
+- **Versión de protocolo: `v2`.** Viaja en el campo `v` de cada mensaje.
   Un cliente que ve una versión que no conoce **descarta el mensaje**, no adivina.
+  La v2 (sep-2026) movió las zonas de acopio y la salida, y agregó los campos
+  raíz `depot_size` y `cube_side`. El detalle y la nota de migración están en
+  `contrato/CONTRATO.md`.
 - **El último valor gana:** buffer de **un mensaje por cliente**; si no drena, se pisa.
   **Nunca encolar telemetría vieja.**
 - Cada mensaje lleva **número de secuencia** y **marca de tiempo de captura**.
@@ -98,16 +101,19 @@ Vision-Rover-Challenge/          # raíz del repositorio (fork)
 
 ### Sistema de coordenadas
 - Anclado a **cuatro marcadores ArUco de esquina** (`DICT_4X4_50`).
-- **Origen (0,0) = el CENTRO del marcador ID 0 = esquina de salida de los robots.**
+- **Origen (0,0) = el CENTRO del marcador ID 0.**
   El centro y no una esquina del marcador: es lo único que se puede medir sin
   ambigüedad, tanto en una imagen como sobre la cancha física.
+  **El origen NO es la salida de los robots**: desde la v2 la salida está al
+  centro del lado que va del marcador 0 al 3. El origen es desde dónde se mide;
+  la salida, dónde arrancan los robots.
 - **Disposición de los cuatro marcadores — REGLA DE MONTAJE FÍSICO.**
   Mirando la cancha desde arriba, con el ID 0 arriba a la izquierda, los otros
   tres van en **sentido horario**:
 
   | Marcador | Celda de su centro | Dónde va |
   |---|---|---|
-  | **ID 0** | `(0, 0)` | esquina de **salida de los robots** = origen |
+  | **ID 0** | `(0, 0)` | el **origen** de las coordenadas |
   | **ID 1** | `(cols, 0)` | siguiente en sentido horario |
   | **ID 2** | `(cols, rows)` | diagonal opuesta al origen |
   | **ID 3** | `(0, rows)` | última en sentido horario |
@@ -130,9 +136,25 @@ Vision-Rover-Challenge/          # raíz del repositorio (fork)
   **no hay dos del mismo color**.
 - **Obstáculos:** bloques **amarillos de 10 cm**.
   El **amarillo está reservado**: nunca es un cubo.
-- **Zonas de acopio: son TRES, una por color** (`green`, `blue`, `red`), en las
-  **tres esquinas que no son la de salida**. **Cada cubo va a la zona de acopio de
-  su color.** Decisión confirmada: no hay una zona única compartida.
+- **Zonas de acopio: son TRES, una por color** (`green`, `blue`, `red`),
+  **rectangulares de 200 × 100 mm**, al **centro de cada uno de los tres lados
+  que no son el de la salida**: verde arriba (lado 0–1), rojo a la derecha
+  (1–2), azul abajo (2–3). **Cada cubo va a la zona de acopio de su color.**
+  Decisión confirmada: no hay una zona única compartida.
+  - El **largo** va paralelo al borde y el **fondo** entra hacia adentro, así que
+    el centro de cada zona queda a **2,5 celdas** de su borde.
+  - **La orientación NO se declara: se deduce** del borde más cercano al centro.
+    Un segundo dato declarado podría contradecir al primero.
+  - El tamaño es **uno solo para las tres** y viaja una vez en el mensaje
+    (`depot_size`), no repetido en cada zona.
+  - **Son virtuales: no se pega ni se pinta nada** sobre el tablero. El detector
+    de cubos vive de que el tablero sea acromático, y tres rectángulos de color
+    pegados serían tres manchas permanentes que segmentar.
+  - Un cubo está entregado cuando queda **completamente dentro**: su centro a
+    **media diagonal del cubo** de cada borde. El criterio vive en el contrato,
+    para que el veredicto de la pantalla y el del rover sean el mismo código.
+- **La salida es UN punto**, compartido por los dos robots, al **centro del lado
+  que va del marcador 0 al 3**.
 - **Lugares fijos** (salida y zonas de acopio) van en **listas separadas** de los cubos,
   aunque compartan el color: los cubos se **detectan** (se mueven, se ocluyen,
   envejecen) y los lugares fijos se **declaran** (están siempre, no envejecen).

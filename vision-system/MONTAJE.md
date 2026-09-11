@@ -30,8 +30,13 @@ rovers usan otros números (por ejemplo 10 y 11).
 
 ### Dónde va cada uno
 
-**El ID 0 va en la esquina de salida de los robots.** Esa esquina es el origen
-de todo: la coordenada (0, 0).
+**El ID 0 va en la esquina que marca el ORIGEN**: la coordenada (0, 0), desde
+donde se mide todo lo demás.
+
+> **Ojo si venís del protocolo v1:** esa esquina **ya no es la salida de los
+> robots**. Desde la v2 los robots arrancan del **centro del lado izquierdo**,
+> el que va del marcador 0 al 3 (ver la sección 4). El origen no se movió; lo
+> que se mudó es la salida.
 
 Parado mirando la cancha desde arriba, **con el marcador 0 arriba a la
 izquierda**, los otros tres van **en sentido horario**:
@@ -51,12 +56,12 @@ izquierda**, los otros tres van **en sentido horario**:
    (0, rows)                                   (cols, rows)
 
    ▲
-   └── esquina de SALIDA DE LOS ROBOTS = origen (0,0) = marcador ID 0
+   └── esquina del ORIGEN (0,0) = marcador ID 0
 ```
 
 | Marcador | Va en | Coordenada de su centro |
 |---|---|---|
-| **ID 0** | esquina de **salida de los robots** | `(0, 0)` — el origen |
+| **ID 0** | la esquina del **origen** | `(0, 0)` — desde acá se mide todo |
 | **ID 1** | siguiente en sentido horario | `(cols, 0)` |
 | **ID 2** | diagonal opuesta al origen | `(cols, rows)` |
 | **ID 3** | última en sentido horario | `(0, rows)` |
@@ -182,19 +187,72 @@ cancha real se van a comportar distinto.
 
 ---
 
-## 4. Las tres zonas de acopio
+## 4. Las tres zonas de acopio y la salida
 
-Hay **tres zonas de acopio**, una por color (**verde**, **azul**, **rojo**), en
-las **tres esquinas que no son la de salida**. Cada cubo va a la zona de su
-color.
+> ### ✋ Acá no hay nada que pegar
+>
+> **Las zonas de acopio y la salida son VIRTUALES.** No se pinta, no se pega y
+> no se marca nada sobre el tablero. Existen como dato en la configuración y
+> como dibujo sobre el video, y nada más.
+>
+> No es una comodidad: es una condición. La detección de cubos se apoya en que
+> **el tablero es acromático** —todo lo que tiene color saturado es, por
+> definición, un objeto del juego— así que tres rectángulos de color pegados en
+> la cancha serían tres manchas de color permanentes compitiendo con los cubos.
 
-**Qué color va en qué esquina es una decisión del montaje.** Lo que se decida
-físicamente tiene que quedar reflejado en la configuración, en la lista `depots`
-de [`contrato/config_simulador.json`](contrato/config_simulador.json).
+### Dónde están
 
-Los equipos **no suponen** qué color va dónde: lo leen del mensaje. Pero si la
-configuración no coincide con la cancha real, van a llevar los cubos al lugar
-equivocado sin que nada avise.
+Hay **tres zonas de acopio**, una por color, de **200 × 100 mm** cada una —10 ×
+5 celdas—, al **centro de cada uno de los tres lados que no son el de la
+salida**. Cada cubo va a la zona de su color.
+
+```
+              col ─────────────────────────────────────►
+
+   (0,0) ▣═════════════[  zona VERDE  ]═════════════▣ (cols, 0)
+     │   ║                                          ║
+     │   ║                                          ║
+    row  ║                                    zona  ║
+     │   ▪ SALIDA                             ROJA  ╢
+     │   ║                                          ║
+     ▼   ║                                          ║
+         ▣═════════════[  zona AZUL   ]═════════════▣ (cols, rows)
+```
+
+| Lugar | Color | Lado | Centro, en celdas |
+|---|---|---|---|
+| Acopio | **verde** | arriba (del ID 0 al 1) | `(21.5, 2.5)` |
+| Acopio | **rojo** | derecha (del ID 1 al 2) | `(40.5, 21.5)` |
+| Acopio | **azul** | abajo (del ID 2 al 3) | `(21.5, 40.5)` |
+| **Salida** | — | izquierda (del ID 3 al 0) | `(2.5, 21.5)` |
+
+Cada zona apoya su **lado largo sobre el borde** de la cancha y entra 100 mm
+hacia adentro, así que su centro queda a **2,5 celdas del borde**. Los dos
+robots arrancan del **mismo punto**, al centro del lado izquierdo.
+
+### Qué hay que hacer, entonces
+
+Nada con las manos, y dos cosas con la cabeza:
+
+1. **Que la configuración diga lo mismo en los dos archivos.** La asignación de
+   color por lado se declara en
+   [`vision/config_vision.json`](vision/config_vision.json) → `lugares`, y tiene
+   que coincidir con
+   [`contrato/config_simulador.json`](contrato/config_simulador.json), contra el
+   que desarrollan los equipos.
+2. **Que la organización deje los cubos donde la configuración dice.** Los
+   equipos **no suponen** qué color va dónde: lo leen del mensaje. Pero si lo
+   declarado no coincide con dónde la organización espera los cubos, los rovers
+   van a entregar en el lugar equivocado sin que nada avise.
+
+Para ver dónde caen las zonas sobre la cancha real, abrí la vista en vivo: las
+dibuja encima de la imagen, con el rectángulo interior de la **ventana de
+aceptación**, que es donde tiene que quedar el centro del cubo para que cuente
+como entregado. Ver la sección 6.
+
+> **Empujar el cubo hasta el fondo.** Sobre el eje del fondo, la ventana deja
+> **7,6 mm** de tolerancia a cada lado del eje de la zona. Un cubo apoyado en el
+> borde de adentro puede no contar; empujado hasta el fondo, cuenta con margen.
 
 ---
 
@@ -244,8 +302,9 @@ otra terminal:
    0, 1, 2 y 3. Si falta alguno, avisa con un mensaje que dice cuáles vio.
    Arrancar con tres **no alcanza**: para conservar la geometría hace falta
    haberla establecido antes con los cuatro.
-2. **El origen está donde debe.** Poner algo en la esquina de salida y confirmar
-   que el sistema lo reporta cerca de `col ≈ 0, row ≈ 0`.
+2. **El origen está donde debe.** Poner algo sobre el centro del marcador ID 0 y
+   confirmar que el sistema lo reporta cerca de `col ≈ 0, row ≈ 0`. (El origen,
+   no la salida: desde la v2 son dos lugares distintos.)
 3. **La orientación no está espejada.** Mover un objeto **hacia la derecha** y
    confirmar que `col` **aumenta**. Después moverlo **hacia abajo** y confirmar
    que `row` **aumenta**. En la vista, los **ejes azules** salen del marcador 0
@@ -258,6 +317,12 @@ otra terminal:
    que dibuja la vista coinciden con las del tablero real, el sistema de
    coordenadas está bien. Si están corridas, rotadas o inclinadas, hay un
    problema de montaje.
+6. **Las tres zonas y la salida caen donde tienen que caer.** La vista las
+   dibuja sobre la imagen: verde arriba, roja a la derecha, azul abajo y la
+   salida al centro del lado izquierdo. Como en la cancha **no hay nada
+   pintado**, este dibujo es la única forma de verlas. Si una zona no cae donde
+   la organización piensa dejar los cubos, se corrige en la configuración —no
+   con cinta— y se vuelve a mirar.
 
 > El paso 3 es el que atrapa el error de montaje más probable: marcadores
 > pegados en orden antihorario en vez de horario. Con los cuatro detectados y

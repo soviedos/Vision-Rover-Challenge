@@ -180,6 +180,43 @@ class Vista:
             cv2.putText(lienzo, str(id_aruco), (centro[0] + 13, centro[1] - 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, _ESQUINA, 2, cv2.LINE_AA)
 
+    @staticmethod
+    def _sufijo_zona(z) -> str:
+        """El estado de la zona, para el título de su etiqueta."""
+        if z is None or not z.presente:
+            return ""
+        if z.contado:
+            return " · EN POSICIÓN"
+        if z.adentro:
+            return " · SOSTENIENDO"
+        return ""
+
+    def _detalle_zona(self, z, geo) -> str:
+        """La segunda línea de la etiqueta: POR QUÉ la zona está como está.
+
+        Antes decía siempre el centro de la zona, que no cambia nunca y ya está
+        en la configuración. Mostrar en su lugar el estado del cubo responde la
+        pregunta que uno se hace mirando la pantalla —*¿por qué esta zona no
+        cuenta?*— en vez de dejar tres casos muy distintos con la misma cara:
+        no hay cubo, el cubo está adentro pero todavía no se sostuvo, y el cubo
+        está afuera por unos milímetros.
+
+        Pasó en la cancha real: con dos cubos bien puestos el sistema mostraba
+        una sola zona marcada, y desde la imagen no había forma de saber si el
+        conteo estaba mal o si los cubos no cumplían el criterio. Estaban
+        oscilando a través del límite.
+        """
+        cell = self._cfg.tablero.cell_mm
+        if z is None:
+            return "({:.2f}, {:.2f})".format(geo.col, geo.row)
+        if not z.presente:
+            return "sin cubo"
+        if z.contado:
+            return "({:.2f}, {:.2f})".format(geo.col, geo.row)
+        if z.adentro:
+            return "dentro hace {} ms".format(z.adentro_hace_ms)
+        return "le falta {:.1f} mm".format(z.falta_celdas * cell)
+
     def _rect_celdas(self, lienzo, col, row, semi_col, semi_row):
         """Las cuatro esquinas de un rectángulo en celdas, ya en píxeles."""
         esquinas = np.array([
@@ -257,8 +294,8 @@ class Vista:
             # entregó el cubo lo está tapando— y quien mira tiene que saberlo.
             edad = z.edad_cubo_ms if (contado and z.edad_cubo_ms > _EDAD_VIEJA_MS) else 0
             self._etiqueta(lienzo, punto[0],
-                           "{}{}".format(color, " · EN POSICIÓN" if contado else ""),
-                           "({:.2f}, {:.2f})".format(geo.col, geo.row), edad, color_bgr)
+                           "{}{}".format(color, self._sufijo_zona(z)),
+                           self._detalle_zona(z, geo), edad, color_bgr)
 
         salida = self._a_px(lienzo, np.array([list(self._salida)]))
         if salida is not None:

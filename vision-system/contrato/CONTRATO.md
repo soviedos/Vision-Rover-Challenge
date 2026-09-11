@@ -1,6 +1,6 @@
 # Contrato de telemetría — Vision-Rover-Challenge
 
-**Protocolo v1**
+**Protocolo v2**
 
 Este documento es el acuerdo entre el **sistema de visión** y **los equipos**.
 La visión mira la cancha desde arriba y publica, varias veces por segundo, dónde
@@ -9,6 +9,23 @@ está cada cosa. Ustedes lo consumen.
 Lo que está acá **no cambia por sorpresa**. Si algo tiene que cambiar, sube el
 número de versión (`v`) y se les avisa. Pueden escribir código contra este
 formato con confianza.
+
+> ### 🔁 Qué cambió en la v2
+>
+> - Las **zonas de acopio** dejan de ser un punto en una esquina: ahora son
+>   **rectángulos de 20 × 10 cm**, uno al **centro de cada uno de los tres lados**
+>   que no son el de la salida. `depots[i]` es el **centro** del rectángulo.
+> - La **salida** deja de estar en la esquina del marcador 0 y pasa al **centro
+>   del lado que va del marcador 0 al 3** (el lado izquierdo). **El origen de
+>   coordenadas no se movió**: sigue siendo el centro del marcador 0.
+> - El mensaje suma dos campos raíz: **`depot_size`** (el tamaño de las zonas) y
+>   **`cube_side`** (el lado del cubo), los dos en celdas.
+> - Con eso se puede calcular **si un cubo está completamente dentro de su
+>   zona**, que es la condición de entrega del reglamento. La regla, con código
+>   para copiar, está en la [sección 3](#cuándo-un-cubo-está-en-su-zona).
+>
+> La nota de migración —qué se rompe y qué no— está en la
+> [sección 9](#9-cambios-de-contrato).
 
 > ### 🚀 ¿Nunca corriste esto? Empezá por la [sección 7](#7-herramientas-incluidas-y-cómo-correrlas)
 >
@@ -116,31 +133,29 @@ línea**):
 
 ```json
 {
-  "v": 1,
+  "v": 2,
   "seq": 4137,
   "ts_ms": 1785012345678,
   "phase": "RUNNING",
   "grid": { "cols": 43, "rows": 43, "cell_mm": 20.0 },
   "rovers": [
-    { "id": 10, "col": 4.302,  "row": 3.705,  "theta": 46.20, "age_ms": 0 },
+    { "id": 10, "col": 18.402, "row": 6.705,  "theta": 84.20, "age_ms": 0 },
     { "id": 11, "col": 15.265, "row": 28.661, "theta": 40.22, "age_ms": 0 }
   ],
   "cubes": [
-    { "color": "green", "col": 25.968, "row": 9.999,  "age_ms": 0   },
+    { "color": "green", "col": 21.480, "row": 2.512,  "age_ms": 0   },
     { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425 },
     { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0   }
   ],
-  "obstacles": [
-    { "col": 21.468, "row": 21.511, "age_ms": 0 },
-    { "col": 10.014, "row": 16.952, "age_ms": 0 },
-    { "col": 30.946, "row": 14.951, "age_ms": 0 }
-  ],
-  "start":  { "col": 2.5, "row": 2.5 },
+  "obstacles": [],
+  "start":  { "col": 2.5, "row": 21.5 },
   "depots": [
-    { "color": "green", "col": 40.5, "row": 2.5  },
-    { "color": "blue",  "col": 2.5,  "row": 40.5 },
-    { "color": "red",   "col": 40.5, "row": 40.5 }
-  ]
+    { "color": "green", "col": 21.5, "row": 2.5  },
+    { "color": "red",   "col": 40.5, "row": 21.5 },
+    { "color": "blue",  "col": 21.5, "row": 40.5 }
+  ],
+  "depot_size": { "length": 10.0, "depth": 5.0 },
+  "cube_side": 3.0
 }
 ```
 
@@ -148,6 +163,11 @@ línea**):
 > (`15.265, 28.661`) y lo tapa. El cubo **no desapareció** de la lista: sigue
 > ahí, con su última posición conocida y la edad creciendo. Esto es lo normal,
 > no un error. Ver la sección 6.
+>
+> Y mirá el **verde**: está en `(21.480, 2.512)` y su zona está centrada en
+> `(21.5, 2.5)`. Ese cubo **ya está entregado**, y se comprueba con la cuenta de
+> [más abajo](#cuándo-un-cubo-está-en-su-zona) — no alcanza con que las
+> coordenadas se parezcan.
 
 ---
 
@@ -157,7 +177,7 @@ línea**):
 
 | Campo | Tipo | Significado |
 |---|---|---|
-| `v` | entero | Versión del protocolo. Hoy `1`. **Si ven un número que no conocen, descarten el mensaje**: el formato cambió. |
+| `v` | entero | Versión del protocolo. Hoy `2`. **Si ven un número que no conocen, descarten el mensaje**: el formato cambió. |
 | `seq` | entero | Número de secuencia, sube de a uno por mensaje publicado. Sirve para detectar pérdidas. |
 | `ts_ms` | entero | Instante de **captura del cuadro**, en milisegundos desde época (Unix). **No** es el instante de envío. |
 | `phase` | texto | `IDLE`, `READY`, `RUNNING` o `FINISHED`. Ver sección 5. |
@@ -165,8 +185,10 @@ línea**):
 | `rovers` | lista | Robots detectados. **Dinámico.** |
 | `cubes` | lista | Cubos detectados. **Dinámico.** |
 | `obstacles` | lista | Obstáculos detectados. **Dinámico.** |
-| `start` | objeto | Esquina de salida. **Estático.** |
-| `depots` | lista | Zonas de acopio. **Estático.** |
+| `start` | objeto | Punto de salida de los robots. **Estático.** |
+| `depots` | lista | Zonas de acopio: el **centro** de cada una. **Estático.** |
+| `depot_size` | objeto | Tamaño de las zonas, en celdas. **Uno solo para las tres.** **Estático.** |
+| `cube_side` | número | Lado del cubo, en celdas. **Estático.** |
 
 ### `grid`
 
@@ -248,20 +270,27 @@ intercambiables entre sí; lo único que importa es esquivarlos.
 | `col` | float | Posición en celdas. |
 | `row` | float | Posición en celdas. |
 
-Esquina de salida de los robots. Coincide con el **origen (0,0)**, que es el
-marcador ArUco de **menor ID (el 0)**.
+**Punto de salida de los robots**, compartido por los dos. Está al **centro del
+lado que va del marcador 0 al 3** —el lado izquierdo mirando la cancha desde
+arriba—, a 2,5 celdas del borde.
+
+> **Ojo, que son dos cosas distintas.** Hasta la v1 la salida coincidía con el
+> **origen (0,0)**, que es el centro del marcador ArUco de menor ID. En la v2 la
+> salida se mudó al centro del lado, pero **el origen no se movió**: se sigue
+> midiendo desde el marcador 0. Si su código usaba `start` como si fuera el
+> origen, ahí hay un supuesto que dejó de valer.
 
 ### `depots[]`
 
 | Campo | Tipo | Significado |
 |---|---|---|
 | `color` | texto | `green`, `blue` o `red`. |
-| `col` | float | Posición en celdas. |
-| `row` | float | Posición en celdas. |
+| `col` | float | **Centro** de la zona, en celdas. |
+| `row` | float | **Centro** de la zona, en celdas. |
 
-Zonas de acopio, **una por color**, en las tres esquinas que no son la de
-salida. **Cada cubo va al depot de su color.** Se cruzan las dos listas por
-`color`:
+Zonas de acopio, **una por color**, al **centro de cada uno de los tres lados**
+que no son el de la salida. **Cada cubo va al depot de su color.** Se cruzan las
+dos listas por `color`:
 
 ```python
 depots_por_color = {d["color"]: d for d in msg["depots"]}
@@ -269,34 +298,151 @@ for cubo in msg["cubes"]:
     destino = depots_por_color[cubo["color"]]
 ```
 
-**No asuman qué color va en qué esquina.** Eso se define al montar la cancha y
+**No asuman qué color va en qué lado.** Eso se define al montar la cancha y
 puede cambiar. Léanlo del mensaje.
 
-### ¿Por qué `start` y `depots` no tienen `age_ms`?
+**`col` y `row` son el CENTRO del rectángulo**, no una esquina. El tamaño está
+en `depot_size` y la orientación **no se declara**: se deduce, y cómo se deduce
+está [más abajo](#cuándo-un-cubo-está-en-su-zona).
 
-Porque no se detectan: **se declaran**. Son lugares fijos que siempre están y
-nunca se ocluyen. Los cubos, en cambio, se mueven, se tapan y envejecen. Por eso
-van en listas separadas aunque compartan el color.
+### `depot_size`
+
+| Campo | Tipo | Significado |
+|---|---|---|
+| `length` | float | Lado **largo** de la zona, en celdas. Va **paralelo al borde** donde apoya. |
+| `depth` | float | **Fondo**: cuánto entra la zona desde el borde hacia adentro, en celdas. |
+
+Hoy vale `{ "length": 10.0, "depth": 5.0 }`, o sea **200 × 100 mm**.
+
+Es **uno solo para las tres zonas**, y por eso viaja una vez en la raíz del
+mensaje y no repetido en cada `depot`: tres copias del mismo número son tres
+oportunidades de que un día digan cosas distintas.
+
+Se llama largo y fondo —y no ancho y alto— porque **la zona gira con su lado**:
+la de arriba tiene sus 10 celdas sobre `col`, y la de la derecha, sobre `row`.
+"Ancho" querría decir cosas distintas en cada una.
+
+### `cube_side`
+
+| Tipo | Significado |
+|---|---|
+| float | Lado del cubo, en celdas. Hoy `3.0`, o sea **60 mm**. |
+
+Viaja en el mensaje por la misma razón que `grid`: **no lo asuman**. El veredicto
+de "cubo completamente dentro de su zona" depende del lado del cubo tanto como
+del tamaño de la zona, y un número copiado de este documento no se puede
+verificar contra lo que la cancha está publicando.
+
+### Cuándo un cubo está en su zona
+
+El reglamento pide que el cubo quede **completamente dentro** del área de su zona
+de acopio. Esta es la cuenta exacta con la que se decide, y es la misma que usa
+el sistema de visión para mostrarlo en pantalla.
+
+**Primero: sobre qué lado apoya la zona.** No viene en el mensaje, se deduce. La
+zona apoya su lado largo sobre el **borde de la cancha más cercano a su centro**.
+Con los números de esta edición el centro está a **2,5 celdas** de su borde y a
+**21,5** de los perpendiculares, así que no hay ambigüedad posible.
+
+**Después: el margen de media diagonal.** El centro del cubo tiene que estar a
+`cube_side * √2 / 2` de cada borde del rectángulo. Ese número —**2,1213 celdas =
+42,43 mm**— es el radio del círculo que contiene al cubo entero, así que el
+criterio **vale para cualquier rotación** del cubo, y ustedes lo pueden calcular
+**con el puro centro**: la rotación del cubo no viaja en el mensaje, y no hace
+falta.
+
+Lo que queda es la **ventana de aceptación**: dónde puede caer el centro del cubo.
+
+| | Zona | Ventana donde cae el centro |
+|---|---|---|
+| A lo **largo** | 200 mm | **115,15 mm** (±57,6 mm desde el centro) |
+| A lo **ancho del fondo** | 100 mm | **15,15 mm** (±7,6 mm desde el centro) |
+
+> ⚠️ **El fondo es angosto: 7,6 mm de tolerancia a cada lado del eje de la zona.**
+> El sistema de visión ubica con un error máximo medido de 1 a 1,6 mm y declara
+> 10 mm como criterio de aceptación, así que el margen existe pero es ajustado.
+> Traducido a la cancha: **empujen el cubo hasta el fondo de la zona**, no lo
+> dejen apoyado en el borde de adentro.
+
+Este fragmento corre tal cual, con Python puro y nada importado:
+
+```python
+import math
+
+
+def cubo_en_su_zona(cubo, depot, depot_size, grid, cube_side):
+    """¿El cubo entero está dentro de su zona? Devuelve (adentro, cuánto falta)."""
+    # 1. Sobre qué borde apoya la zona: el más cercano a su centro.
+    distancias = {
+        "arriba": depot["row"],
+        "abajo": grid["rows"] - depot["row"],
+        "izquierda": depot["col"],
+        "derecha": grid["cols"] - depot["col"],
+    }
+    lado = min(distancias, key=lambda l: distancias[l])
+
+    # 2. El largo va paralelo al borde, así que cuál de las dos medidas
+    #    corresponde a col y cuál a row depende del lado.
+    if lado in ("arriba", "abajo"):
+        semi_col, semi_row = depot_size["length"] / 2, depot_size["depth"] / 2
+    else:
+        semi_col, semi_row = depot_size["depth"] / 2, depot_size["length"] / 2
+
+    # 3. Media diagonal del cubo: el margen que lo mete entero con cualquier
+    #    rotación, sin necesitar conocerla.
+    margen = cube_side * math.sqrt(2) / 2
+
+    exceso_col = max(0.0, abs(cubo["col"] - depot["col"]) - (semi_col - margen))
+    exceso_row = max(0.0, abs(cubo["row"] - depot["row"]) - (semi_row - margen))
+    falta = math.hypot(exceso_col, exceso_row)
+    return falta == 0.0, falta
+```
+
+Con el cubo verde del mensaje de la [sección 2](#2-el-mensaje) —`(21.480, 2.512)`
+contra una zona centrada en `(21.5, 2.5)`— da `(True, 0.0)`: está entregado. Si
+el mismo cubo estuviera medio celda más abajo, en `row = 3.012`, daría
+`(False, 0.1213)`: le faltarían 0,12 celdas, o sea 2,4 mm.
+
+Está implementado así en [`test_client.py`](test_client.py), listo para copiar.
+
+### ¿Por qué `start`, `depots`, `depot_size` y `cube_side` no tienen `age_ms`?
+
+Porque no se detectan: **se declaran**. Son lugares y medidas fijas que siempre
+están y nunca se ocluyen. Los cubos, en cambio, se mueven, se tapan y envejecen.
+Por eso van en listas separadas aunque compartan el color.
 
 ---
 
 ## 4. Sistema de coordenadas
 
 ```
-      col ──────────────────────────────────►
-  (0,0) ┌───────────────────────────────────┐
-   │    │  ▣ start / origen                 │  ▣ = marcador ArUco de esquina
-   │    │  (marcador ID 0)                  │
-  row   │                                   │
-   │    │            ■ obstáculo            │
-   │    │                                   │
-   ▼    │       ▪ cubo                      │
-        │                                   │
-        └───────────────────────────────────┘
-                                        (cols, rows)
+              col ─────────────────────────────────────►
+
+   (0,0) ▣═════════════[  zona VERDE  ]═════════════▣ (cols, 0)
+     │   ║                                          ║
+     │   ║                                          ║          ▣ = marcador
+    row  ║                                    zona  ║              ArUco
+     │   ▪ SALIDA            ▪ cubo           ROJA  ╢
+     │   ║                                          ║
+     ▼   ║                                          ║
+         ▣═════════════[  zona AZUL   ]═════════════▣ (cols, rows)
 ```
 
-- **Origen (0,0)** = marcador ArUco de **menor ID (el 0)** = **esquina de salida**.
+Los números exactos de esta cancha de 43 × 43 celdas:
+
+| Lugar | Color | Lado | Centro (col, row) | Ocupa en col | Ocupa en row |
+|---|---|---|---|---|---|
+| Acopio | `green` | arriba (0→1) | `(21.5, 2.5)` | 16,5 a 26,5 | 0 a 5 |
+| Acopio | `red` | derecha (1→2) | `(40.5, 21.5)` | 38 a 43 | 16,5 a 26,5 |
+| Acopio | `blue` | abajo (2→3) | `(21.5, 40.5)` | 16,5 a 26,5 | 38 a 43 |
+| Salida | — | izquierda (3→0) | `(2.5, 21.5)` | — | — |
+
+**Léanlos del mensaje igual.** Están acá para que se entienda la disposición, no
+para que los escriban en el código: si se monta otra cancha, cambian.
+
+- **Origen (0,0)** = marcador ArUco de **menor ID (el 0)**. Desde la v2 **no** es
+  la salida: la salida está al centro del lado izquierdo. El origen es desde
+  dónde se mide; la salida, dónde arrancan los robots.
 - **`col` crece hacia la derecha.**
 - **`row` crece hacia abajo.**
 - **Unidad: celdas con decimales.** Una celda = **20 mm**.
@@ -449,7 +595,7 @@ avanzando con datos de hace un segundo choca.
 ### 6.5. Validen la versión
 
 ```python
-if msg["v"] != 1:
+if msg["v"] != 2:
     continue      # formato desconocido: descartar, no adivinar
 ```
 
@@ -545,7 +691,7 @@ python3 mock_publisher.py
 
 ```
 ==================================================================
-Simulador del Vision-Rover-Challenge — protocolo v1
+Simulador del Vision-Rover-Challenge — protocolo v2
 Publicando NDJSON en 0.0.0.0:2026 a 20 Hz
 Cancha: 43x43 celdas de 20 mm
 Comandos: ready | start | stop | quit
@@ -600,19 +746,26 @@ Conectado. Ctrl-C para cortar.
 
 --- primer mensaje: ejemplo de consumo -------------------------
   cancha: 43x43 celdas de 20.0 mm  |  fase: IDLE
-  rover id=10  col=3.99 row=3.94 theta=46.0°  age=0 ms
-  rover id=11  col=3.98 row=8.00 theta=43.7°  age=0 ms
-  cubo green en (25.97, 10.03) -> depot (40.50, 2.50)  age=0 ms
-  cubo blue  en (14.99, 29.04) -> depot (2.50, 40.50)  age=0 ms
-  cubo red   en (32.99, 25.95) -> depot (40.50, 40.50)  age=0 ms
-  obstáculo amarillo en (21.49, 21.49)
-  obstáculo amarillo en (9.96, 16.96)
-  obstáculo amarillo en (30.99, 15.11)
-  salida en (2.50, 2.50)
+  rover id=10  col=3.94 row=17.45 theta=359.9°  age=0 ms
+  rover id=11  col=4.02 row=25.43 theta=358.5°  age=0 ms
+  zona de acopio: 10.0 x 5.0 celdas (largo x fondo)  |  cubo: 3.0 celdas de lado
+  cubo green en (25.99, 10.10) -> zona arriba (21.50, 2.50)  age=0 ms  [le falta 7.40 celdas]
+  cubo blue  en (14.92, 28.93) -> zona abajo (21.50, 40.50)  age=0 ms  [le falta 11.78 celdas]
+  cubo red   en (32.92, 26.08) -> zona derecha (40.50, 21.50)  age=0 ms  [le falta 7.40 celdas]
+  salida en (2.50, 21.50)
 ---------------------------------------------------------------
 
-[  2.0s] recibidos=38 invalidos=0 saltos=0 (perdidos=0)  latencia min/prom/max = 2/19/39 ms  age_max=39 ms
+[  2.0s] recibidos=38 invalidos=0 saltos=0 (perdidos=0)  latencia min/prom/max = 0/19/35 ms  age_max=38 ms
 ```
+
+> Los dos rovers arrancan **junto a la salida**, al centro del lado izquierdo, y
+> los tres cubos están repartidos por la cancha: por eso a cada uno "le falta"
+> lo que le falta para entrar en su zona. Ese corchete es la cuenta de la
+> [sección 3](#cuándo-un-cubo-está-en-su-zona) corriendo sobre datos de verdad,
+> y cuando el cubo entra dice `EN POSICIÓN`.
+>
+> `obstacles` no aparece porque llega **vacío**, que es lo normal en esta
+> edición del reto.
 
 **Cómo leer esas cifras:**
 
@@ -792,7 +945,7 @@ while True:
         linea, buffer = buffer.split(b"\n", 1)
         mensaje = json.loads(linea)
 
-        if mensaje["v"] != 1:                   # versión desconocida: descartar
+        if mensaje["v"] != 2:                   # versión desconocida: descartar
             continue
         if mensaje["phase"] != "RUNNING":       # fuera de la ronda no se juega
             continue
@@ -830,10 +983,10 @@ corriendo (Paso 3), corrélo con `python3 mi_cliente.py` y escribí `start` en l
 terminal del simulador. Vas a ver:
 
 ```
-fase=RUNNING  mi rover: col=13.66 row=3.38 theta=345.1
-   cubo green en (26.03, 9.97)   ->  depot (40.50, 2.50)
-   cubo blue  en (15.02, 28.96)  ->  depot (2.50, 40.50)
-   cubo red   en (32.98, 25.99)  ->  depot (40.50, 40.50)
+fase=RUNNING  mi rover: col=12.03 row=17.92 theta=359.2
+   cubo green en (26.05, 10.06)  ->  depot (21.50, 2.50)
+   cubo blue  en (14.93, 28.96)  ->  depot (21.50, 40.50)
+   cubo red   en (33.03, 26.14)  ->  depot (40.50, 21.50)
 ```
 
 **Detalles que importan de ese ejemplo, y por qué:**
@@ -936,7 +1089,7 @@ python3 test_client.py
 
 **Garantiza:**
 
-- El formato de este documento, mientras `v` valga `1`.
+- El formato de este documento, mientras `v` valga `2`.
 - Que va a **seguir publicando** aunque algo falle adentro: ante un error se
   conserva el último estado bueno y se sigue emitiendo. El sistema no se cae a
   mitad de ronda.
@@ -962,6 +1115,28 @@ Este formato **es un contrato**. No cambia sin:
 
 1. **subir `v`**, y
 2. **avisarles** con tiempo.
+
+### Migración de la v1 a la v2
+
+**Qué NO se rompe.** Nada de la forma del mensaje que ya consumían: `grid`,
+`rovers`, `cubes`, `obstacles`, `phase`, `seq`, `ts_ms`, `start` y `depots`
+siguen existiendo, con los mismos nombres, los mismos tipos y las mismas
+unidades. El transporte, el puerto, el NDJSON y la política de último-valor-gana
+tampoco cambian. El código que itera listas y busca por identidad sigue andando.
+
+**Qué se rompe, y cómo darse cuenta.**
+
+| Qué | Qué hacer |
+|---|---|
+| El chequeo `msg["v"] != 1` descarta **todos** los mensajes | Cambiarlo por `!= 2`. Es el síntoma más común: el cliente conecta, no procesa nada y parece que la visión no publica. |
+| Un validador estricto que rechace campos desconocidos | Ahora llegan `depot_size` y `cube_side`. Aceptarlos. |
+| Código que trataba `start` como el **origen (0,0)** | Ya no coinciden. El origen sigue siendo el marcador 0; la salida está en `(2.5, 21.5)`. |
+| Código que asumía las zonas **en las esquinas** | Ahora están al centro de los lados. Si estaba escrito leyendo `depots` del mensaje —como pedía la v1— no hay nada que tocar. |
+| Llegar a la zona y soltar el cubo "cerca" del punto | En la v1 la zona era un punto y "cerca" era una decisión de cada equipo. Ahora hay un **criterio exacto** y el cubo tiene que quedar **entero adentro**: ver [la cuenta](#cuándo-un-cubo-está-en-su-zona). |
+
+**Qué conviene aprovechar.** `depot_size` y `cube_side` les permiten calcular
+**durante la ronda** si un cubo ya está entregado, con la misma cuenta que usa la
+visión. No hace falta estimarlo ni pedirlo por radio.
 
 Si algo de este documento les resulta ambiguo, **pregunten antes de asumir**.
 Una ambigüedad aclarada a tiempo cuesta cinco minutos; descubierta el día de la

@@ -14,10 +14,23 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from typing import Any
 
 import cv2
+
+# `contrato/` es hermana de `vision/`, no está adentro. Se la agrega al camino de
+# búsqueda para poder importarla sin instalar nada, igual que hace `mundo.py`.
+# La configuración depende del contrato —nunca al revés— para poder comprobar
+# contra ÉL las medidas que declara: el tamaño de las zonas y el lado del cubo
+# son parte del contrato, y dos números distintos diciendo lo mismo es
+# exactamente lo que no puede pasar.
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
+
+from contrato import schema  # noqa: E402  (después de tocar sys.path, a propósito)
 
 CONFIG_POR_DEFECTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config_vision.json")
 
@@ -201,11 +214,40 @@ class Publicacion:
 
 @dataclass(frozen=True, slots=True)
 class Deposito:
-    """Una zona de acopio: dónde está y de qué color."""
+    """Una zona de acopio: de qué color es y dónde está su CENTRO.
+
+    La zona es un rectángulo, pero su tamaño no está acá: es el mismo para las
+    tres y vive una sola vez en `TamanoDeposito`. Su orientación tampoco, porque
+    no se declara: se deduce del borde más cercano al centro.
+    """
 
     color: str
     col: float
     row: float
+
+
+@dataclass(frozen=True, slots=True)
+class TamanoDeposito:
+    """Tamaño de las tres zonas de acopio, en milímetros.
+
+    `largo_mm` va **paralelo al borde** donde apoya la zona y `fondo_mm` entra
+    hacia adentro de la cancha. Se nombran así y no "ancho" y "alto" porque la
+    zona gira con su lado: "el largo va sobre el borde" vale igual para la de
+    arriba que para la de la derecha, mientras que "ancho" querría decir cosas
+    distintas en cada una.
+
+    Es **uno solo para las tres**: tres copias del mismo número son tres
+    oportunidades de que un día digan cosas distintas.
+    """
+
+    largo_mm: float
+    fondo_mm: float
+
+    def largo_celdas(self, cell_mm: float) -> float:
+        return self.largo_mm / cell_mm
+
+    def fondo_celdas(self, cell_mm: float) -> float:
+        return self.fondo_mm / cell_mm
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,6 +259,11 @@ class Lugares:
     donde no hace falta. Por eso viajan en el mensaje en listas separadas de los
     cubos, aunque compartan el color.
 
+    Las tres zonas son además **virtuales**: no se pega ni se pinta nada sobre el
+    tablero. Existen como dato declarado y como dibujo sobre el video, y eso
+    deja en pie el supuesto del que vive la detección de cubos —que el tablero es
+    acromático—, que tres rectángulos de color pegados en la cancha romperían.
+
     El contrato los exige en **cada** mensaje: sin ellos el sistema de visión
     sabría dónde está cada objeto y no sabría adónde hay que llevarlo.
     """
@@ -224,6 +271,24 @@ class Lugares:
     start_col: float
     start_row: float
     depositos: tuple[Deposito, ...]
+    tamano_deposito: TamanoDeposito
+
+
+@dataclass(frozen=True, slots=True)
+class ConteoAcopio:
+    """Cuánto tiene que sostenerse un cubo adentro para darlo por contado.
+
+    El conteo es **en vivo**: cuenta los que están adentro ahora, y si un rover
+    saca uno, la cuenta baja. La permanencia mínima existe para que el número no
+    **titile** con el cubo parado justo en el borde del criterio, donde medio
+    milímetro de jitter alcanzaría para que salte entre 2 y 3 varias veces por
+    segundo. Solo demora **entrar**, nunca **salir**.
+
+    No está para tapar detecciones malas: de eso ya se ocupa el seguimiento,
+    que con una detección no confiable conserva la última posición buena.
+    """
+
+    permanencia_minima_ms: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -516,6 +581,7 @@ class ConfigVision:
     marcadores_esquina: MarcadoresEsquina
     elementos: Elementos
     lugares: Lugares
+    conteo_acopio: ConteoAcopio
     seguimiento: Seguimiento
     publicacion: Publicacion
     deteccion_rovers: DeteccionRovers
@@ -697,6 +763,14 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
             Deposito(color=str(x["color"]), col=float(x["col"]), row=float(x["row"]))
             for x in lu["depots"]
         ),
+        tamano_deposito=TamanoDeposito(
+            largo_mm=float(lu["tamano_deposito_mm"]["largo"]),
+            fondo_mm=float(lu["tamano_deposito_mm"]["fondo"]),
+        ),
+    )
+
+    conteo_acopio = ConteoAcopio(
+        permanencia_minima_ms=int(d["conteo_acopio"]["permanencia_minima_ms"])
     )
 
     dr = d["deteccion_rovers"]
@@ -800,6 +874,7 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
         marcadores_esquina=marcadores,
         elementos=elementos,
         lugares=lugares,
+        conteo_acopio=conteo_acopio,
         seguimiento=seguimiento,
         publicacion=publicacion,
         deteccion_rovers=deteccion_rovers,
@@ -817,6 +892,185 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     if error is not None:
         raise ValueError("config_vision.json: " + error)
     return cfg
+
+
+def geometrias_deposito(cfg: ConfigVision) -> dict[str, schema.GeometriaDepot]:
+    """La geometría de cada zona de acopio, por color.
+
+    Sale del **contrato** y no de una cuenta hecha acá: el veredicto que muestra
+    la pantalla y el que calcula el equipo en su rover tienen que ser el mismo, y
+    la única forma de garantizarlo es que sea el mismo código. Esta función solo
+    traduce lo que dice la configuración —milímetros— a lo que habla el contrato
+    —celdas—.
+
+    Lanza `ValueError` si la orientación de alguna zona es ambigua, o sea si su
+    centro está a igual distancia de dos bordes. `revisar_config` lo convierte en
+    un error de configuración con nombre y apellido.
+    """
+    cell_mm = cfg.tablero.cell_mm
+    tam = cfg.lugares.tamano_deposito
+    return {
+        dep.color: schema.geometria_depot(
+            col=dep.col,
+            row=dep.row,
+            length=tam.largo_celdas(cell_mm),
+            depth=tam.fondo_celdas(cell_mm),
+            cols=cfg.tablero.cols,
+            rows=cfg.tablero.rows,
+            cube_side=cfg.elementos.cubos.lado_mm / cell_mm,
+        )
+        for dep in cfg.lugares.depositos
+    }
+
+
+def _distancia_al_borde(lado: str, col: float, row: float, cols: float, rows: float) -> float:
+    """Cuánto hay del punto al borde nombrado, en celdas."""
+    return {
+        schema.LADO_ARRIBA: row,
+        schema.LADO_ABAJO: rows - row,
+        schema.LADO_IZQUIERDA: col,
+        schema.LADO_DERECHA: cols - col,
+    }[lado]
+
+
+def _revisar_zonas(cfg: ConfigVision) -> str | None:
+    """Revisa la geometría de las zonas de acopio y de la salida.
+
+    Nada de esto rompe el formato del mensaje: una zona mal declarada publica
+    números perfectamente válidos que describen una cancha imposible, y el
+    equipo que consume eso ve que su cubo nunca entra y busca el error en su
+    propio código. Por eso se falla acá, temprano y con nombre.
+    """
+    lug = cfg.lugares
+    tam = lug.tamano_deposito
+    cell_mm = cfg.tablero.cell_mm
+    cols, rows = cfg.tablero.cols, cfg.tablero.rows
+
+    if tam.largo_mm <= 0 or tam.fondo_mm <= 0:
+        return "lugares.tamano_deposito_mm: largo y fondo deben ser > 0"
+    for nombre, valor in (("largo", tam.largo_mm), ("fondo", tam.fondo_mm)):
+        celdas = valor / cell_mm
+        if abs(celdas - round(celdas)) > 1e-9:
+            return (
+                "lugares.tamano_deposito_mm.{} = {} mm no es múltiplo de la celda de {} mm "
+                "({:.3f} celdas). Las zonas se apoyan en la cuadrícula del tablero: un "
+                "tamaño que no cae en celdas enteras no se puede marcar ni medir sobre la "
+                "cancha".format(nombre, valor, cell_mm, celdas)
+            )
+
+    largo_celdas = tam.largo_celdas(cell_mm)
+    fondo_celdas = tam.fondo_celdas(cell_mm)
+    if (largo_celdas, fondo_celdas) != (schema.DEPOT_LENGTH_CELLS, schema.DEPOT_DEPTH_CELLS):
+        return (
+            "lugares.tamano_deposito_mm dice {:.0f} x {:.0f} celdas y el contrato dice "
+            "{:.0f} x {:.0f} (DEPOT_LENGTH_CELLS y DEPOT_DEPTH_CELLS en contrato/schema.py). "
+            "El tamaño de la zona es parte del contrato: si cambia, cambia allá y sube la "
+            "versión del protocolo".format(
+                largo_celdas, fondo_celdas,
+                schema.DEPOT_LENGTH_CELLS, schema.DEPOT_DEPTH_CELLS)
+        )
+    if abs(cfg.elementos.cubos.lado_mm - schema.CUBE_SIDE_MM) > 1e-9:
+        return (
+            "elementos.cubos.lado_mm = {} mm y el contrato dice {} mm (CUBE_SIDE_MM en "
+            "contrato/schema.py). De ese número sale el margen de media diagonal con el que "
+            "se decide si un cubo está en su zona, así que los dos lados tienen que decir "
+            "lo mismo".format(cfg.elementos.cubos.lado_mm, schema.CUBE_SIDE_MM)
+        )
+
+    try:
+        lado_salida = schema.lado_mas_cercano(
+            col=lug.start_col, row=lug.start_row, cols=cols, rows=rows)
+    except ValueError as exc:
+        return "lugares.start: {}".format(exc)
+    try:
+        geometrias = geometrias_deposito(cfg)
+    except ValueError as exc:
+        return "lugares.depots: {}".format(exc)
+
+    ocupados: dict[str, str] = {}
+    for dep in lug.depositos:
+        geo = geometrias[dep.color]
+        if geo.lado == lado_salida:
+            return (
+                "lugares: el depósito {} está en el lado {}, que es el de la SALIDA. Los "
+                "robots arrancan ahí y no se acopia donde se arranca".format(dep.color, geo.lado)
+            )
+        if geo.lado in ocupados:
+            return (
+                "lugares: los depósitos {} y {} están los dos en el lado {}. Son tres zonas "
+                "y tres lados libres: una en cada uno".format(
+                    ocupados[geo.lado], dep.color, geo.lado)
+            )
+        ocupados[geo.lado] = dep.color
+
+        if (geo.col - geo.semi_col < -1e-9 or geo.col + geo.semi_col > cols + 1e-9
+                or geo.row - geo.semi_row < -1e-9 or geo.row + geo.semi_row > rows + 1e-9):
+            return (
+                "lugares: el depósito {} está centrado en ({}, {}) y su rectángulo de "
+                "{:.0f} x {:.0f} celdas se sale de la cancha de {}x{}".format(
+                    dep.color, dep.col, dep.row, largo_celdas, fondo_celdas, cols, rows)
+            )
+
+        distancia = _distancia_al_borde(geo.lado, dep.col, dep.row, cols, rows)
+        if abs(distancia - fondo_celdas / 2.0) > 1e-9:
+            return (
+                "lugares: el depósito {} está a {:.3f} celdas del borde {} y tendría que "
+                "estar a {:.3f}, que es medio fondo. La zona apoya su lado largo SOBRE el "
+                "borde, así que su centro queda a medio fondo hacia adentro".format(
+                    dep.color, distancia, geo.lado, fondo_celdas / 2.0)
+            )
+
+        if geo.ventana_col <= 0 or geo.ventana_row <= 0:
+            return (
+                "lugares: en el depósito {} no entra ningún cubo. La zona mide {:.0f} x "
+                "{:.0f} celdas y el margen conservador de media diagonal del cubo es de "
+                "{:.3f} celdas, así que la ventana donde puede caer el centro queda de "
+                "{:.3f} x {:.3f}: negativa o nula. Hay que agrandar la zona o achicar el "
+                "cubo".format(dep.color, largo_celdas, fondo_celdas, geo.margen,
+                              geo.ventana_col * 2.0, geo.ventana_row * 2.0)
+            )
+
+    if cfg.conteo_acopio.permanencia_minima_ms < 0:
+        return "conteo_acopio.permanencia_minima_ms no puede ser negativo"
+    return None
+
+
+def avisos_config(cfg: ConfigVision) -> list[str]:
+    """Lo que conviene saber pero **no** impide arrancar.
+
+    Está separado de `revisar_config` a propósito: un error deja el sistema sin
+    arrancar porque lo que declara es imposible; un aviso dice que lo declarado
+    es posible pero justo, y esa distinción la tiene que poder ver quien opera,
+    no decidirla el código. Un aviso que bloqueara el arranque terminaría
+    borrado; un error que solo avisara, ignorado.
+    """
+    avisos: list[str] = []
+    try:
+        geometrias = geometrias_deposito(cfg)
+    except ValueError:
+        return avisos  # es un error de configuración, y ya lo reporta revisar_config
+
+    cell_mm = cfg.tablero.cell_mm
+    umbral_mm = cfg.precision.umbral_mm
+    for color, geo in sorted(geometrias.items()):
+        tolerancia_mm = min(geo.ventana_col, geo.ventana_row) * cell_mm
+        if tolerancia_mm < umbral_mm:
+            avisos.append(
+                "la zona {} deja una ventana de aceptación de {:.1f} x {:.1f} mm, o sea "
+                "{:.1f} mm de tolerancia a cada lado del eje sobre el fondo, y el criterio "
+                "de precisión del sistema es de {:.0f} mm (precision.umbral_mm). El conteo "
+                "de cubos en posición queda AL LÍMITE: si en la cancha real resulta "
+                "inestable, hay que subir el fondo de la zona —de {:.0f} a 150 mm—, no "
+                "aflojar el criterio".format(
+                    color, geo.ventana_col * 2.0 * cell_mm, geo.ventana_row * 2.0 * cell_mm,
+                    tolerancia_mm, umbral_mm, cfg.lugares.tamano_deposito.fondo_mm)
+            )
+    if cfg.conteo_acopio.permanencia_minima_ms == 0:
+        avisos.append(
+            "conteo_acopio.permanencia_minima_ms está en 0: el contador va a titilar "
+            "cuando un cubo quede parado en el borde del criterio"
+        )
+    return avisos
 
 
 def revisar_config(cfg: ConfigVision) -> str | None:
@@ -931,6 +1185,9 @@ def revisar_config(cfg: ConfigVision) -> str | None:
                 "lugares: {} está en ({}, {}), fuera de la cancha de {}x{} celdas".format(
                     nombre, col, row, cfg.tablero.cols, cfg.tablero.rows)
             )
+    error = _revisar_zonas(cfg)
+    if error is not None:
+        return error
     dc_cfg = cfg.deteccion_cubos
     faltan_matices = sorted(set(cfg.elementos.cubos.colores) - set(dc_cfg.matices_grados))
     if faltan_matices:

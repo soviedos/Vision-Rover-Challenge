@@ -21,7 +21,7 @@
     "_NO_HAY_LIMITE_DE_TIEMPO": "Se puede seguir con tres marcadores indefinidamente, y es a propósito: lo que autoriza a conservar la homografía no es que haya pasado poco tiempo sino que los tres visibles SIGUEN CONFIRMÁNDOLA en cada cuadro. La salvaguarda es la verificación, no un cronómetro. Si un marcador se despega a mitad de ronda, el sistema sigue con precisión completa en vez de quedarse ciego el resto de la ronda.",
     "_REGLA_DE_MONTAJE_FISICO": "⚠️ ESTO NO ES SOLO CÓDIGO: ES LA INSTRUCCIÓN DE CÓMO PEGAR LOS MARCADORES EN LA CANCHA. Si se pegan en otro orden, TODAS las coordenadas salen rotadas o espejadas y nada de lo que publique la visión va a tener sentido. Antes de pegar, leer esto y verificarlo dos veces. La guía completa de montaje, con la comprobación previa a la primera ronda, está en vision-system/MONTAJE.md.",
     "_DISPOSICION_EN_LA_CANCHA": [
-      "El ID 0 va en la ESQUINA DE SALIDA DE LOS ROBOTS. Esa esquina es el origen (0,0).",
+      "El ID 0 marca el ORIGEN (0,0) de las coordenadas. OJO: desde el protocolo v2 esa esquina YA NO es la salida de los robots —los robots salen del centro del lado que va del ID 0 al ID 3— pero el origen no se movió y esta regla de montaje no cambia.",
       "Parado mirando la cancha desde arriba, con el marcador 0 arriba a la izquierda,",
       "los otros tres van EN SENTIDO HORARIO: 1 arriba a la derecha, 2 abajo a la derecha,",
       "3 abajo a la izquierda.",
@@ -61,7 +61,7 @@
       "_nota_altura": "Es un cubo, así que su altura ES su lado: 60 mm. No se repite como campo aparte para que no puedan quedar dos números distintos diciendo lo mismo.",
       "_DECISION_SE_UBICA_POR_EL_BORDE_INFERIOR": "El cubo NO se ubica por el centro de su mancha de color, sino por su BORDE INFERIOR: la línea donde el cubo apoya en el piso. Decidido el 9-ago-2026. El motivo es que un punto en el piso está a altura CERO, así que el factor de paralaje (H-h)/H vale exactamente 1 y NO HAY NADA QUE CORREGIR: la homografía del tablero es exacta ahí por construcción. La alternativa —el centroide de la mancha— no sirve: lo que la cámara ve de un cubo es la tapa MÁS una o dos caras laterales, así que ese centroide está a una altura efectiva intermedia que además cambia según dónde esté el cubo en la cancha. Corregirlo con h=60 sobre-corregiría.",
       "_OJO_EL_BORDE_NO_ES_EL_CENTRO": "El borde inferior da una LÍNEA en el piso, y el contrato publica el CENTRO. Tomar el punto más bajo de la mancha da una esquina de la base, que está entre 30 y 42 mm del centro según cómo esté rotado el cubo: tres a cuatro veces el umbral de 10 mm. La forma correcta es trabajar en CELDAS y no en píxeles: al pasar el contorno por la homografía, lo que está en el piso cae exactamente donde está y lo que tiene altura cae corrido hacia afuera del punto bajo la cámara, así que el borde de la mancha que MIRA HACIA EL NADIR son las dos aristas de la base. Como la huella es un cuadrado de `lado_mm` conocido, ajustar esas dos aristas perpendiculares reconstruye el cuadrado y el centro queda a medio lado hacia adentro de cada una. Exacto, y sin necesitar la pose de la cámara.",
-      "_nota_colores": "El color ES la identidad del cubo en el contrato v1: no hay dos del mismo color, por eso los cubos no llevan ID. Son los mismos tres colores de los depots declarados en contrato/config_simulador.json, y cada cubo va al depot de su color. El AMARILLO está reservado para los obstáculos: un objeto amarillo nunca es un cubo.",
+      "_nota_colores": "El color ES la identidad del cubo en el contrato: no hay dos del mismo color, por eso los cubos no llevan ID. Son los mismos tres colores de los depots declarados en `lugares.depots` y en contrato/config_simulador.json, y cada cubo va a la zona de acopio de su color. El AMARILLO está reservado para los obstáculos: un objeto amarillo nunca es un cubo.",
       "_nota_para_que_sirve": "La detección de color (detectors/, todavía no existe) va a segmentar por saturación y clasificar en espacio Lab. `lado_mm` le dice qué tamaño de mancha es plausible para un cubo; `colores` le dice en qué clases tiene que clasificar."
     },
     "marcador_rover": {
@@ -99,33 +99,46 @@
     "_POR_QUE_NO_A_LA_TASA_DE_LA_CAMARA": "Porque son dos relojes que no deben esperarse. La cámara entrega 30 cuadros por segundo y la detección corre a 51: publicar a la tasa de la cámara ataría la red al procesamiento y viceversa. Con temporizador propio, un cuadro lento no frena la publicación y un cliente lento no frena el procesamiento."
   },
   "lugares": {
-    "_acerca_de": "LUGARES FIJOS de la cancha: la esquina de salida y las tres zonas de acopio. Se DECLARAN, no se detectan (CLAUDE.md, sección 5): están siempre, no se mueven y no envejecen, así que no tiene sentido buscarlas en cada cuadro. Por eso viajan en el mensaje en listas separadas de los cubos, aunque compartan el color.",
+    "_acerca_de": "LUGARES FIJOS de la cancha: el punto de salida y las tres zonas de acopio. Se DECLARAN, no se detectan (CLAUDE.md, sección 5): están siempre, no se mueven y no envejecen, así que no tiene sentido buscarlas en cada cuadro. Por eso viajan en el mensaje en listas separadas de los cubos, aunque compartan el color.",
     "_SIN_ESTO_NO_SE_PUEDE_PUBLICAR": "El contrato exige `start` y `depots` en CADA mensaje. Hasta que se declararon acá, el sistema de visión no podía emitir un mensaje válido: sabía dónde estaba cada objeto y no sabía adónde había que llevarlo.",
     "_nota_sincronizacion": "⚠️ Estos valores DEBEN coincidir con los de contrato/config_simulador.json. Los equipos desarrollan contra el simulador, así que si dicen cosas distintas, el código que les funciona ahí les falla en la cancha. Es la misma regla que ya rige para la grilla.",
-    "_nota_colores": "Cada cubo va al depósito de SU color, y los equipos cruzan las dos listas por `color`. Qué color va en qué esquina se decide al montar la cancha y puede cambiar: por eso el contrato le dice a los equipos que NO lo asuman y lo lean del mensaje.",
+    "_nota_colores": "Cada cubo va al depósito de SU color, y los equipos cruzan las dos listas por `color`. Qué color va en qué lado se declara acá y puede cambiar sin tocar código: por eso el contrato le dice a los equipos que NO lo asuman y lo lean del mensaje.",
     "start": {
       "col": 2.5,
-      "row": 2.5
+      "row": 21.5
     },
-    "_nota_start": "Esquina de salida de los robots. Está del lado del marcador ID 0, que es el origen (0,0); las coordenadas son del centro de la zona, no de su esquina.",
+    "_nota_start": "Punto de salida de los robots, compartido por los dos. Está al CENTRO del lado que va del marcador 0 al 3 —el izquierdo mirando la cancha desde arriba—, a 2,5 celdas del borde, que es medio fondo de zona. OJO: el ORIGEN de coordenadas no se movió; sigue siendo el centro del marcador ID 0 en (0,0). Lo que cambió en el protocolo v2 es dónde arrancan los robots, no desde dónde se mide.",
     "depots": [
       {
         "color": "green",
-        "col": 40.5,
+        "col": 21.5,
         "row": 2.5
-      },
-      {
-        "color": "blue",
-        "col": 2.5,
-        "row": 40.5
       },
       {
         "color": "red",
         "col": 40.5,
+        "row": 21.5
+      },
+      {
+        "color": "blue",
+        "col": 21.5,
         "row": 40.5
       }
     ],
-    "_nota_depots": "Tres zonas de acopio, una por color, en las TRES esquinas que no son la de salida. Decisión cerrada: no hay una zona única compartida, y eso convierte el reto en un problema de asignación y no solo de transporte."
+    "_nota_depots": "Tres zonas de acopio, una por color, al CENTRO de cada uno de los tres lados que NO son el de la salida: verde arriba (lado 0-1), rojo a la derecha (lado 1-2), azul abajo (lado 2-3). col/row son el CENTRO del rectángulo. Decisión cerrada: no hay una zona única compartida, y eso convierte el reto en un problema de asignación y no solo de transporte. La asignación de color por lado está DECIDIDA y se puede cambiar acá sin tocar código; los equipos igual la leen del mensaje y no la asumen.",
+    "tamano_deposito_mm": {
+      "largo": 200.0,
+      "fondo": 100.0
+    },
+    "_nota_tamano_deposito": "Tamaño de las tres zonas, en milímetros: 200 de LARGO (paralelo al borde donde apoya la zona) por 100 de FONDO (entrando hacia adentro de la cancha). Son 10 x 5 celdas de 20 mm. Es UN solo tamaño para las tres y viaja una sola vez en el mensaje, como `depot_size`, no repetido en cada depot. Tiene que coincidir con DEPOT_LENGTH_CELLS y DEPOT_DEPTH_CELLS de contrato/schema.py, y la revisión de configuración falla si no.",
+    "_NO_SE_MARCAN_EN_EL_TABLERO": "Las tres zonas son VIRTUALES: no se pega ni se pinta nada sobre la cancha. Existen solo como dato declarado acá y como dibujo sobre el video. Es deliberado: el detector de cubos se apoya en que el tablero es ACROMÁTICO —todo lo saturado es un objeto—, y tres rectángulos de color pegados en la cancha serían tres manchas de color permanentes para segmentar. El generador sintético tampoco las dibuja, por la misma razón: simula lo que la cámara ve del tablero físico.",
+    "_LA_VENTANA_DEL_FONDO_ES_ANGOSTA": "⚠️ Un cubo cuenta como 'en posición' cuando su centro está a media diagonal del cubo (60 * raíz(2) / 2 = 42,43 mm) de cada borde de la zona. Con estas medidas la ventana de aceptación queda de 115,2 x 15,2 mm: sobre el eje del FONDO el centro del cubo tiene apenas 7,6 mm de tolerancia a cada lado, y el sistema declara 10 mm como criterio de precisión (precision.umbral_mm). Está al límite, y la revisión de configuración lo levanta como AVISO en cada arranque. Si en la cancha real el conteo resulta inestable, lo que hay que subir es el fondo de la zona —de 100 a 150 mm—, no aflojar el criterio.",
+    "_nota_geometria": "La ORIENTACIÓN de cada zona no se declara: se deduce del borde más cercano a su centro. Cada centro está a 2,5 celdas de su borde y a 21,5 de los perpendiculares, así que no hay ambigüedad. Un segundo dato declarado podría contradecir al primero; uno deducido, no."
+  },
+  "conteo_acopio": {
+    "_acerca_de": "Conteo de cubos en posición, que el sistema muestra en pantalla (vision/reglas/acopio.py). NO viaja en el mensaje: la visión informa, no decide. Al completarse los tres, la imagen lo anuncia y la fase la sigue cerrando una persona con `stop`.",
+    "permanencia_minima_ms": 1000,
+    "_nota_permanencia": "Cuánto tiene que sostenerse un cubo dentro de su zona para darlo por contado. Existe para que el contador NO TITILE cuando el cubo queda justo en el borde del criterio: ahí, un jitter de detección de medio milímetro alcanzaría para que la cuenta saltara entre 2 y 3 varias veces por segundo, y eso en pantalla se lee como un sistema roto. NO está para tapar detecciones malas: una detección no confiable ya la filtra el seguimiento antes, conservando la última posición buena. Si un rover saca el cubo, la cuenta baja de inmediato: la permanencia solo demora ENTRAR, nunca SALIR."
   },
   "deteccion_rovers": {
     "_acerca_de": "Detección de rovers a partir de su marcador ArUco (vision/detectors/rovers.py). Qué marcador es un rover NO se declara acá: es rover todo marcador que NO sea una esquina de `marcadores_esquina.disposicion`. Así la regla no se rompe si mañana las esquinas fueran otras, y no hay una lista de IDs de rover que mantener sincronizada con la realidad.",

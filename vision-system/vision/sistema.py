@@ -53,7 +53,7 @@ try:  # como paquete
     from .geometry.distorsion import (
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
-    from .mundo import FASES
+    from .mundo import FASES, VERSION_PROTOCOLO
     from .publish.puerto import ErrorPuerto
     from .publish.telemetria import PublicadorTelemetria
     from .tracking.seguimiento import Seguidor
@@ -72,7 +72,7 @@ except ImportError:  # como script suelto
     from vision.geometry.distorsion import (  # type: ignore[no-redef]
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
-    from vision.mundo import FASES  # type: ignore[no-redef]
+    from vision.mundo import FASES, VERSION_PROTOCOLO  # type: ignore[no-redef]
     from vision.publish.puerto import ErrorPuerto  # type: ignore[no-redef]
     from vision.publish.telemetria import PublicadorTelemetria  # type: ignore[no-redef]
     from vision.tracking.seguimiento import Seguidor  # type: ignore[no-redef]
@@ -261,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     salir = threading.Event()
 
     print("=" * 70)
-    print("SISTEMA DE VISIÓN — Vision-Rover-Challenge · protocolo v1")
+    print("SISTEMA DE VISIÓN — Vision-Rover-Challenge · protocolo v{}".format(VERSION_PROTOCOLO))
     print("Entrada: {}".format(descripcion))
     if args.sintetico:
         print("")

@@ -64,6 +64,13 @@ from contrato import schema  # noqa: E402  (después de tocar sys.path, a propó
 #: Las fases que puede tener una ronda. La visión es árbitro y esta es su voz.
 FASES = ("IDLE", "READY", "RUNNING", "FINISHED")
 
+#: La versión del protocolo, reexportada desde el contrato para que el resto de
+#: `vision/` no la escriba a mano. Un "v1" olvidado en un cartel de pantalla
+#: mientras el socket emite v2 es exactamente el tipo de mentira que nadie
+#: revisa. Esta es la única puerta al contrato, así que también es la puerta de
+#: su número de versión.
+VERSION_PROTOCOLO = schema.PROTOCOL_VERSION
+
 
 @dataclass(frozen=True, slots=True)
 class RoverEnMundo:
@@ -125,14 +132,25 @@ def a_mensaje(estado: EstadoMundo, cfg: ConfigVision, seq: int) -> schema.Mensaj
     `obstacles` sale siempre como lista vacía: esta edición del reto no los usa.
     El campo sigue existiendo y sigue siendo una lista, así que **no es un cambio
     de contrato** y ningún equipo tiene que tocar nada.
+
+    `depot_size` y `cube_side` salen de la configuración y viajan **en celdas**,
+    como toda longitud del mensaje. Se publican en vez de dejarlos como constante
+    del documento porque el veredicto de "cubo completamente dentro de su zona"
+    depende de los dos, y un número copiado a mano por el equipo no se puede
+    verificar contra lo que la cancha está publicando.
     """
+    cell_mm = cfg.tablero.cell_mm
+    tamano = cfg.lugares.tamano_deposito
     return schema.Mensaje(
         seq=seq,
         ts_ms=estado.ts_ms,
         phase=estado.fase,
         grid=schema.Grid(cols=cfg.tablero.cols, rows=cfg.tablero.rows,
-                         cell_mm=cfg.tablero.cell_mm),
+                         cell_mm=cell_mm),
         start=schema.Start(col=cfg.lugares.start_col, row=cfg.lugares.start_row),
+        depot_size=schema.DepotSize(length=tamano.largo_mm / cell_mm,
+                                    depth=tamano.fondo_mm / cell_mm),
+        cube_side=cfg.elementos.cubos.lado_mm / cell_mm,
         depots=tuple(
             schema.Depot(color=d.color, col=d.col, row=d.row) for d in cfg.lugares.depositos
         ),

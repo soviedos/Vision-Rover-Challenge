@@ -41,11 +41,13 @@ import numpy as np
 
 try:  # como paquete
     from .configuracion import ConfigVision
+    from .mundo import VERSION_PROTOCOLO
     from .tools.panel import (
         AMBAR, BLANCO, GRIS, ROJO, VERDE, Panel, Tipografia, escala_para, sin_acentos,
     )
 except ImportError:  # como script suelto
     from vision.configuracion import ConfigVision  # type: ignore[no-redef]
+    from vision.mundo import VERSION_PROTOCOLO  # type: ignore[no-redef]
     from vision.tools.panel import (  # type: ignore[no-redef]
         AMBAR, BLANCO, GRIS, ROJO, VERDE, Panel, Tipografia, escala_para, sin_acentos,
     )
@@ -235,7 +237,7 @@ class Vista:
 
     def _dibujar_panel(self, lienzo, estado, info: dict) -> None:
         panel = Panel(self._tipografia)
-        panel.titulo("Sistema de visión · protocolo v1")
+        panel.titulo("Sistema de visión · protocolo v{}".format(VERSION_PROTOCOLO))
         if info.get("sintetico"):
             panel.destacado("DATOS SINTÉTICOS", ROJO, "no es la cancha real")
         panel.destacado(info.get("fase", "IDLE"), VERDE if info.get("fase") == "RUNNING" else BLANCO,

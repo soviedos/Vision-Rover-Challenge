@@ -49,7 +49,10 @@ from typing import Any
 try:  # como paquete: python -m contrato.mock_publisher
     from .schema import (
         CUBE_COLORS,
+        CUBE_SIDE_MM,
         DEFAULT_PORT,
+        DEPOT_DEPTH_CELLS,
+        DEPOT_LENGTH_CELLS,
         FASE_FINISHED,
         FASE_IDLE,
         FASE_READY,
@@ -57,6 +60,7 @@ try:  # como paquete: python -m contrato.mock_publisher
         PROTOCOL_VERSION,
         Cube,
         Depot,
+        DepotSize,
         Grid,
         Mensaje,
         Obstacle,
@@ -64,12 +68,17 @@ try:  # como paquete: python -m contrato.mock_publisher
         Start,
         ahora_ms,
         codificar_ndjson,
+        geometria_depot,
+        lado_mas_cercano,
     )
     from .publicador import Publicador
 except ImportError:  # como script suelto: python contrato/mock_publisher.py
     from schema import (  # type: ignore[no-redef]
         CUBE_COLORS,
+        CUBE_SIDE_MM,
         DEFAULT_PORT,
+        DEPOT_DEPTH_CELLS,
+        DEPOT_LENGTH_CELLS,
         FASE_FINISHED,
         FASE_IDLE,
         FASE_READY,
@@ -77,6 +86,7 @@ except ImportError:  # como script suelto: python contrato/mock_publisher.py
         PROTOCOL_VERSION,
         Cube,
         Depot,
+        DepotSize,
         Grid,
         Mensaje,
         Obstacle,
@@ -84,6 +94,8 @@ except ImportError:  # como script suelto: python contrato/mock_publisher.py
         Start,
         ahora_ms,
         codificar_ndjson,
+        geometria_depot,
+        lado_mas_cercano,
     )
     from publicador import Publicador  # type: ignore[no-redef]
 
@@ -128,6 +140,8 @@ class Config:
     grid: Grid
     start: Start
     depots: tuple[Depot, ...]
+    depot_size: DepotSize
+    cube_side: float
     rovers_iniciales: tuple[dict[str, Any], ...]
     cubes_iniciales: tuple[dict[str, Any], ...]
     obstacles_iniciales: tuple[dict[str, Any], ...]
@@ -170,6 +184,10 @@ def cargar_config(ruta: str) -> Config:
         depots=tuple(
             Depot(color=x["color"], col=float(x["col"]), row=float(x["row"])) for x in d["depots"]
         ),
+        depot_size=DepotSize(
+            length=float(d["depot_size"]["length"]), depth=float(d["depot_size"]["depth"])
+        ),
+        cube_side=float(d["cube_side"]),
         rovers_iniciales=tuple(d["rovers"]),
         cubes_iniciales=tuple(d["cubes"]),
         obstacles_iniciales=tuple(d["obstacles"]),
@@ -210,6 +228,72 @@ def revisar_config(cfg: Config) -> str | None:
         return "config: hay rovers con el mismo id de marcador ArUco"
     if cfg.pub_hz <= 0 or cfg.sim_hz <= 0:
         return "config: pub_hz y sim_hz deben ser > 0"
+    return _revisar_zonas(cfg)
+
+
+def _revisar_zonas(cfg: Config) -> str | None:
+    """Revisa la geometría de las zonas de acopio y de la salida.
+
+    Una zona mal puesta no rompe el formato del mensaje: publica números
+    válidos que describen una cancha imposible. El equipo los consume, calcula
+    que su cubo nunca entra, y busca el error en su código.
+    """
+    if cfg.depot_size.length <= 0 or cfg.depot_size.depth <= 0:
+        return "config: depot_size.length y depot_size.depth deben ser > 0"
+    if (cfg.depot_size.length, cfg.depot_size.depth) != (DEPOT_LENGTH_CELLS, DEPOT_DEPTH_CELLS):
+        return (
+            "config: depot_size dice {} x {} celdas y el contrato dice {} x {} "
+            "(DEPOT_LENGTH_CELLS y DEPOT_DEPTH_CELLS en schema.py). El simulador y la "
+            "cancha real no pueden declarar zonas de distinto tamaño: los equipos "
+            "desarrollan contra esto".format(
+                cfg.depot_size.length, cfg.depot_size.depth,
+                DEPOT_LENGTH_CELLS, DEPOT_DEPTH_CELLS)
+        )
+    if cfg.cube_side <= 0:
+        return "config: cube_side debe ser > 0"
+    lado_contrato = CUBE_SIDE_MM / cfg.grid.cell_mm
+    if abs(cfg.cube_side - lado_contrato) > 1e-9:
+        return (
+            "config: cube_side dice {} celdas y el contrato dice {} ({} mm de "
+            "CUBE_SIDE_MM sobre celdas de {} mm)".format(
+                cfg.cube_side, lado_contrato, CUBE_SIDE_MM, cfg.grid.cell_mm)
+        )
+
+    try:
+        lado_salida = lado_mas_cercano(
+            col=cfg.start.col, row=cfg.start.row, cols=cfg.grid.cols, rows=cfg.grid.rows)
+    except ValueError as exc:
+        return "config: start: {}".format(exc)
+
+    ocupados: dict[str, str] = {}
+    for dep in cfg.depots:
+        try:
+            geo = geometria_depot(
+                col=dep.col, row=dep.row,
+                length=cfg.depot_size.length, depth=cfg.depot_size.depth,
+                cols=cfg.grid.cols, rows=cfg.grid.rows, cube_side=cfg.cube_side,
+            )
+        except ValueError as exc:
+            return "config: depot {}: {}".format(dep.color, exc)
+        if geo.lado == lado_salida:
+            return (
+                "config: el depot {} está en el lado {}, que es el de la SALIDA. Los "
+                "robots arrancan ahí y no se acopia donde se arranca".format(dep.color, geo.lado)
+            )
+        if geo.lado in ocupados:
+            return (
+                "config: los depots {} y {} están los dos en el lado {}; hay tres lados "
+                "libres y una zona en cada uno".format(ocupados[geo.lado], dep.color, geo.lado)
+            )
+        ocupados[geo.lado] = dep.color
+        if (geo.col - geo.semi_col < -1e-9 or geo.col + geo.semi_col > cfg.grid.cols + 1e-9
+                or geo.row - geo.semi_row < -1e-9 or geo.row + geo.semi_row > cfg.grid.rows + 1e-9):
+            return (
+                "config: el depot {} está centrado en ({}, {}) y su rectángulo de {} x {} "
+                "celdas se sale de la cancha de {}x{}".format(
+                    dep.color, dep.col, dep.row, cfg.depot_size.length, cfg.depot_size.depth,
+                    cfg.grid.cols, cfg.grid.rows)
+            )
     return None
 
 
@@ -532,6 +616,8 @@ def _hilo_publicacion(
                 phase=mundo.phase,
                 grid=cfg.grid,
                 start=cfg.start,
+                depot_size=cfg.depot_size,
+                cube_side=cfg.cube_side,
                 depots=cfg.depots,
                 rovers=mundo.rovers,
                 cubes=mundo.cubes,

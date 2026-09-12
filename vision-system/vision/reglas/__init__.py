@@ -6,9 +6,10 @@ reto. Son dos trabajos distintos, con dos formas distintas de estar mal —un
 detector se equivoca por la luz o la oclusión, una regla se equivoca por el
 criterio— y mezclarlos vuelve imposible saber cuál de los dos falló.
 
-Nada de acá se publica. El contrato lleva **dónde está cada cosa**, y lo que
-este paquete produce es para la **pantalla**: la visión informa, no arbitra el
-resultado. La fase de la ronda la sigue cerrando una persona.
+Nada de acá se publica. El contrato lleva **dónde está cada cosa**; lo que este
+paquete produce es el **veredicto**, y va a la pantalla y al árbitro. La
+separación se mantiene igual: acá se cuenta y se dice desde cuándo, pero la
+ronda la cierra el árbitro, que es una sola voz y el que lleva el cronómetro.
 
 Nada de acá dibuja tampoco. Estas piezas devuelven datos; quien los pinta es
 `vista.py`.

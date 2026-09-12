@@ -7,9 +7,23 @@ reglamento: un cubo está entregado cuando queda **completamente dentro** de la
 zona de acopio de su color. Devuelve la cuenta y el detalle por color.
 
 **No dibuja**: eso es de `vista.py`. **No publica**: el conteo no viaja en el
-mensaje. **No cambia la fase**: cuando están los tres, la pantalla lo anuncia y
-la ronda la sigue cerrando una persona con `stop`. La visión informa; el juez
-decide.
+mensaje. **No cierra la ronda**: cuando están los tres, se lo informa al árbitro
+—que es quien decide y quien lleva el cronómetro— y él cierra. Acá se cuenta y
+se dice desde cuándo; la ronda la termina una sola voz.
+
+El instante que importa es el de la ENTRADA
+-------------------------------------------
+Por eso se guardan **dos** marcas por color. La permanencia se mide en tiempo de
+**captura**, porque mide cuándo pasaron las cosas y no cuándo se las miró. Pero
+el tiempo oficial de la ronda tiene que ser **monótono**, para que un ajuste de
+hora del sistema no altere un tiempo de competencia, así que junto a la marca de
+captura se guarda una monótona del mismo cuadro.
+
+Lo que se le informa al árbitro es la monótona de **cuando el cubo entró**, no la
+de cuando se cumplió la permanencia. El contador exige un segundo sostenido para
+no titilar; tomar el tiempo oficial ahí le costaría ese segundo a todos los
+equipos por igual, que es lo mismo que decir que el cronómetro está mal
+calibrado.
 
 El veredicto no se calcula acá
 ------------------------------
@@ -51,6 +65,7 @@ sobre qué se apoya lo que está viendo.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 try:  # como paquete
@@ -94,6 +109,11 @@ class ResultadoAcopio:
     """La cuenta y el detalle, en un instante. Inmutable, como el estado."""
 
     zonas: tuple[EstadoZona, ...]
+    #: Tiempo MONÓTONO de la entrada del último cubo que falta para completar el
+    #: reto, o `None` si el reto no está completo. Es lo que el árbitro usa para
+    #: fechar el cierre: el instante en que el cubo entró, no aquel en que se
+    #: cumplió la permanencia un segundo más tarde.
+    instante_completo: float | None = None
 
     @property
     def en_posicion(self) -> int:
@@ -132,20 +152,33 @@ class ContadorAcopio:
         #: captura. Se borra la entrada apenas sale: la permanencia se vuelve a
         #: contar desde cero, porque lo que se quiere medir es que se quede.
         self._desde_ms: dict[str, int] = {}
+        #: La misma entrada, en tiempo MONÓTONO. Va en paralelo y no en
+        #: reemplazo: la permanencia se mide en tiempo de captura, que es cuándo
+        #: pasaron las cosas; el tiempo oficial de la ronda se mide con un reloj
+        #: que ningún ajuste de hora puede mover.
+        self._desde_mono: dict[str, float] = {}
 
     @property
     def geometrias(self) -> dict[str, schema.GeometriaDepot]:
         """Las zonas, para que la vista las dibuje sin recalcularlas."""
         return self._geometrias
 
-    def actualizar(self, estado: EstadoMundo, ts_ms: int) -> ResultadoAcopio:
+    def actualizar(
+        self, estado: EstadoMundo, ts_ms: int, mono: float | None = None
+    ) -> ResultadoAcopio:
         """Evalúa el estado del mundo y devuelve la cuenta.
 
         `ts_ms` es el instante de **captura** del cuadro, el mismo con el que el
         seguimiento mide la edad. No se usa el reloj de pared: si el
         procesamiento se atrasa, la permanencia tiene que medirse sobre el
         tiempo en que las cosas pasaron, no sobre el tiempo en que se las miró.
+
+        `mono` es el instante **monótono** del mismo cuadro, y se guarda en
+        paralelo para poder fechar el cierre de la ronda con un reloj que ningún
+        ajuste de hora pueda mover. Se puede inyectar para verificar sin
+        depender del reloj de la máquina.
         """
+        ahora_mono = time.monotonic() if mono is None else mono
         cubos = {c.color: c for c in estado.cubos}  # el color ES la identidad
 
         zonas = []
@@ -155,6 +188,7 @@ class ContadorAcopio:
                 # Sin cubo no hay nada que sostener: se olvida el conteo para
                 # que, si vuelve, tenga que ganarse la permanencia de nuevo.
                 self._desde_ms.pop(color, None)
+                self._desde_mono.pop(color, None)
                 zonas.append(EstadoZona(
                     color=color, presente=False, adentro=False, contado=False,
                     falta_celdas=float("inf"), adentro_hace_ms=0, edad_cubo_ms=0,
@@ -166,12 +200,15 @@ class ContadorAcopio:
 
             if not veredicto.adentro:
                 self._desde_ms.pop(color, None)
+                self._desde_mono.pop(color, None)
                 adentro_hace_ms = 0
             else:
                 desde = self._desde_ms.setdefault(color, ts_ms)
+                self._desde_mono.setdefault(color, ahora_mono)
                 if ts_ms < desde:  # el reloj retrocedió: se reancla, no se resta mal
                     desde = ts_ms
                     self._desde_ms[color] = desde
+                    self._desde_mono[color] = ahora_mono
                 adentro_hace_ms = ts_ms - desde
 
             zonas.append(EstadoZona(
@@ -184,4 +221,9 @@ class ContadorAcopio:
                 edad_cubo_ms=cubo.age_ms,
             ))
 
-        return ResultadoAcopio(zonas=tuple(zonas))
+        # El instante del reto es el del ÚLTIMO cubo en entrar: los otros ya
+        # estaban, así que el reto se completó cuando entró ese. Solo tiene
+        # sentido si están los tres contados.
+        completo = bool(zonas) and all(z.contado for z in zonas)
+        instante = max(self._desde_mono[z.color] for z in zonas) if completo else None
+        return ResultadoAcopio(zonas=tuple(zonas), instante_completo=instante)

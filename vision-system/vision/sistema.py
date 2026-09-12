@@ -596,6 +596,14 @@ def main(argv: list[str] | None = None) -> int:
                 # conserva la última cuenta buena, igual que todo lo demás.
                 try:
                     acopio = contador.actualizar(estado, estado.ts_ms)
+                    # El contador informa; el árbitro decide. Se le pasa el
+                    # instante de ENTRADA del último cubo, que es con el que
+                    # fecha el cierre: la permanencia se cumple un segundo más
+                    # tarde y cobrárselo a todos sería descalibrar el reloj.
+                    aviso_reto = arbitro.observar_reto(
+                        acopio.completo, acopio.instante_completo)
+                    if aviso_reto:
+                        print("[fase] " + aviso_reto, flush=True)
                 except Exception as exc:  # noqa: BLE001 — a propósito
                     ultimo_error = "acopio: {}: {}".format(type(exc).__name__, exc)
             except ErrorDuplicado as exc:

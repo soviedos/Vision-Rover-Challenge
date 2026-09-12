@@ -35,11 +35,15 @@ import sys
 
 try:  # como paquete
     from ..configuracion import Ronda, cargar_config
+    from ..mundo import CuboEnMundo, EstadoMundo
+    from ..reglas.acopio import ContadorAcopio
     from ..sistema import (
         MOTIVO_ABORTADA, MOTIVO_OPERADOR, MOTIVO_RETO, MOTIVO_TIEMPO, Arbitro, _TRANSICIONES,
     )
 except ImportError:  # como script suelto
     from vision.configuracion import Ronda, cargar_config  # type: ignore[no-redef]
+    from vision.mundo import CuboEnMundo, EstadoMundo  # type: ignore[no-redef]
+    from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
     from vision.sistema import (  # type: ignore[no-redef]
         MOTIVO_ABORTADA, MOTIVO_OPERADOR, MOTIVO_RETO, MOTIVO_TIEMPO, Arbitro, _TRANSICIONES,
     )
@@ -327,6 +331,84 @@ def verificar_reto_cumplido(cfg) -> bool:
     return todo_bien
 
 
+def verificar_cierre_por_reto(cfg) -> bool:
+    """El contador y el árbitro JUNTOS: quién cuenta, quién cierra, con qué hora.
+
+    Los dos bloques anteriores prueban al árbitro solo, con el reto informado a
+    mano. Este arma la cadena completa —cubos en el estado del mundo, contador,
+    permanencia, árbitro— porque el defecto que importa vive justo en la unión:
+    el contador da por contado un cubo **un segundo después** de que entró, y si
+    el cierre se fechara ahí, todos los equipos perderían ese segundo.
+
+    Las dos marcas de tiempo se inyectan para que el caso sea exacto y no
+    dependa de lo que tarde la máquina en correr esto.
+    """
+    print("=" * 78)
+    print("CIERRE POR RETO CUMPLIDO: la cadena completa")
+    print("=" * 78)
+
+    permanencia = cfg.conteo_acopio.permanencia_minima_ms
+    centros = {d.color: (d.col, d.row) for d in cfg.lugares.depositos}
+    lejos = (1.0, 1.0)  # junto al marcador 0: afuera de las tres zonas
+
+    def estado_con(colores_adentro, ts_ms):
+        cubos = tuple(
+            CuboEnMundo(color=color,
+                        col=centros[color][0] if color in colores_adentro else lejos[0],
+                        row=centros[color][1] if color in colores_adentro else lejos[1])
+            for color in sorted(centros)
+        )
+        return EstadoMundo(ts_ms=ts_ms, fase="RUNNING", cubos=cubos)
+
+    contador = ContadorAcopio(cfg)
+    arbitro, reloj = _arbitro(cfg, "READY")
+    reloj.avanzar(PREPARACION_MS)
+    arbitro.tictac()                      # empieza la ronda
+    t0_mono, ts0 = reloj(), 1_700_000_000_000
+
+    filas = []
+
+    def paso(ms_de_ronda, colores_adentro, etiqueta):
+        """Un cuadro: avanza los dos relojes a la par y encadena las dos piezas."""
+        reloj.t = t0_mono + ms_de_ronda / 1000.0
+        estado = estado_con(colores_adentro, ts0 + ms_de_ronda)
+        r = contador.actualizar(estado, estado.ts_ms, mono=reloj())
+        aviso = arbitro.observar_reto(r.completo, r.instante_completo)
+        filas.append((etiqueta, r.en_posicion, arbitro.fase, aviso))
+        return r
+
+    todos = sorted(centros)
+    paso(10_000, (), "10 s: los tres cubos afuera")
+    paso(120_000, todos[:2], "120 s: entran dos")
+    paso(200_000, todos, "200 s: entra el ÚLTIMO cubo")
+    paso(200_000 + permanencia - 1, todos, "200,999 s: falta 1 ms de permanencia")
+    paso(200_000 + permanencia, todos, "201 s: se cumple la permanencia")
+
+    print("  {:<38} {:>10} {:>10}  {}".format("cuadro", "contados", "fase", "cierre"))
+    print("  " + "-" * 84)
+    for etiqueta, contados, fase, aviso in filas:
+        print("  {:<38} {:>10} {:>10}  {}".format(
+            etiqueta, "{}/3".format(contados), fase, "—" if not aviso else "SÍ"))
+
+    tiempo = arbitro.tiempo_final_ms
+    comprobaciones = [
+        ("la ronda quedó cerrada", arbitro.fase == "FINISHED"),
+        ("el motivo es reto_cumplido", arbitro.motivo == MOTIVO_RETO),
+        ("el tiempo es el de la ENTRADA (200 s), no el de la permanencia (201 s)",
+         tiempo == 200_000),
+    ]
+    print()
+    todo_bien = True
+    for nombre, ok in comprobaciones:
+        todo_bien = todo_bien and ok
+        print("  {:<70} {}".format(nombre, "OK" if ok else "FALLA"))
+    if tiempo is not None:
+        print("\n  tiempo oficial registrado: {:.3f} s".format(tiempo / 1000.0))
+
+    print("\n  resultado: {}\n".format("TODO OK" if todo_bien else "HAY FALLAS"))
+    return todo_bien
+
+
 def main(argv: list[str] | None = None) -> int:
     argparse.ArgumentParser(
         description="Verifica el árbitro de la ronda: transiciones y cronómetro."
@@ -341,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
         verificar_transiciones(cfg),
         verificar_reloj(cfg),
         verificar_reto_cumplido(cfg),
+        verificar_cierre_por_reto(cfg),
     ]
     print("=" * 78)
     print("RESULTADO GENERAL: {}".format("TODO OK" if all(resultados) else "HAY FALLAS"))

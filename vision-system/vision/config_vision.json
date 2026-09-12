@@ -160,7 +160,7 @@
     "_nota_geometria": "La ORIENTACIÓN de cada zona no se declara: se deduce del borde más cercano a su centro. Cada centro está a 3,75 celdas de su borde y a 21,5 de los perpendiculares, así que no hay ambigüedad. Un segundo dato declarado podría contradecir al primero; uno deducido, no."
   },
   "conteo_acopio": {
-    "_acerca_de": "Conteo de cubos en posición, que el sistema muestra en pantalla (vision/reglas/acopio.py). NO viaja en el mensaje: la visión informa, no decide. Al completarse los tres, la imagen lo anuncia y la fase la sigue cerrando una persona con `stop`.",
+    "_acerca_de": "Conteo de cubos en posición (vision/reglas/acopio.py). NO viaja en el mensaje. Al completarse los tres, el contador se lo informa al árbitro y la ronda se cierra sola, con motivo `reto_cumplido`. El tiempo que se registra es el de la ENTRADA del último cubo, no el del cumplimiento de la permanencia: el contador exige un segundo sostenido para no titilar, y cobrárselo a todos los equipos sería descalibrar el cronómetro.",
     "permanencia_minima_ms": 1000,
     "_nota_permanencia": "Cuánto tiene que sostenerse un cubo dentro de su zona para darlo por contado. Existe para que el contador NO TITILE cuando el cubo queda justo en el borde del criterio: ahí, un jitter de detección de medio milímetro alcanzaría para que la cuenta saltara entre 2 y 3 varias veces por segundo, y eso en pantalla se lee como un sistema roto. NO está para tapar detecciones malas: una detección no confiable ya la filtra el seguimiento antes, conservando la última posición buena. Si un rover saca el cubo, la cuenta baja de inmediato: la permanencia solo demora ENTRAR, nunca SALIR."
   },

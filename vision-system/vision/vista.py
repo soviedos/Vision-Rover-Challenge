@@ -397,10 +397,8 @@ class Vista:
                         "{} cliente(s) conectado(s)".format(info.get("clientes", 0)))
         acopio = info.get("acopio")
         if acopio is not None and acopio.completo:
-            # Anuncia, no arbitra: la fase la sigue cerrando una persona.
             panel.destacado("RETO COMPLETADO", VERDE,
-                            "los {} cubos en su zona · la ronda la cierra el operador "
-                            "con stop".format(acopio.total))
+                            "los {} cubos en su zona".format(acopio.total))
         panel.separador()
 
         visibles = info.get("esquinas_visibles", 0)

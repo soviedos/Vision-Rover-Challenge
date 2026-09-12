@@ -80,6 +80,12 @@ def mostrar_lugares(cfg) -> None:
     print()
     print("  Permanencia mínima para contar un cubo: {} ms".format(
         cfg.conteo_acopio.permanencia_minima_ms))
+    print()
+    print("  Preparación (READY): {:.0f} s      Ronda (RUNNING): {:.0f} s".format(
+        cfg.ronda.preparacion_ms / 1000.0, cfg.ronda.duracion_ms / 1000.0))
+    print("  La preparación termina SOLA: no hay tecla que adelante el paso a")
+    print("  RUNNING. La ronda se cierra al agotarse el tiempo, o antes si los")
+    print("  tres cubos quedan en posición.")
 
 
 def main(argv: list[str] | None = None) -> int:

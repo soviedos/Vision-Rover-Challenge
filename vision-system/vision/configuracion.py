@@ -331,6 +331,26 @@ class ConteoAcopio:
 
 
 @dataclass(frozen=True, slots=True)
+class Ronda:
+    """Los dos tiempos de una ronda, en milisegundos.
+
+    Van **declarados** y no incrustados en el código porque son reglas de
+    competencia: el día que la organización decida que la preparación dura
+    noventa segundos, se cambia acá y no se toca una línea. Y porque probar el
+    sistema sin esperar un minuto real exige poder bajarlos.
+
+    `preparacion_ms` es lo que dura `READY`. Al agotarse, la ronda pasa a
+    `RUNNING` **sola**: eso es lo que hace que todos los equipos preparen con el
+    mismo tiempo, y por eso no hay tecla que lo adelante.
+
+    `duracion_ms` es lo que dura `RUNNING`.
+    """
+
+    preparacion_ms: int
+    duracion_ms: int
+
+
+@dataclass(frozen=True, slots=True)
 class DeteccionRovers:
     """Cómo se pasa de marcadores detectados a rovers.
 
@@ -622,6 +642,7 @@ class ConfigVision:
     elementos: Elementos
     lugares: Lugares
     conteo_acopio: ConteoAcopio
+    ronda: Ronda
     seguimiento: Seguimiento
     publicacion: Publicacion
     deteccion_rovers: DeteccionRovers
@@ -822,6 +843,11 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
         permanencia_minima_ms=int(d["conteo_acopio"]["permanencia_minima_ms"])
     )
 
+    ronda = Ronda(
+        preparacion_ms=int(d["ronda"]["preparacion_ms"]),
+        duracion_ms=int(d["ronda"]["duracion_ms"]),
+    )
+
     dr = d["deteccion_rovers"]
     desf = dr["desfase_marcador_a_centro_mm"]
     deteccion_rovers = DeteccionRovers(
@@ -925,6 +951,7 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
         elementos=elementos,
         lugares=lugares,
         conteo_acopio=conteo_acopio,
+        ronda=ronda,
         seguimiento=seguimiento,
         publicacion=publicacion,
         deteccion_rovers=deteccion_rovers,
@@ -1080,6 +1107,22 @@ def _revisar_zonas(cfg: ConfigVision) -> str | None:
 
     if cfg.conteo_acopio.permanencia_minima_ms < 0:
         return "conteo_acopio.permanencia_minima_ms no puede ser negativo"
+    if cfg.ronda.preparacion_ms <= 0:
+        return (
+            "ronda.preparacion_ms tiene que ser > 0: es lo que dura READY, y en cero "
+            "la ronda pasaría a RUNNING en el mismo cuadro en que se prepara, sin "
+            "darle tiempo de preparación a nadie"
+        )
+    if cfg.ronda.duracion_ms <= 0:
+        return "ronda.duracion_ms tiene que ser > 0: es lo que dura la ronda"
+    if cfg.ronda.duracion_ms <= cfg.conteo_acopio.permanencia_minima_ms:
+        return (
+            "ronda.duracion_ms ({} ms) no puede ser menor o igual que "
+            "conteo_acopio.permanencia_minima_ms ({} ms): la ronda se agotaría antes "
+            "de que un cubo pueda llegar a contarse, así que el reto sería "
+            "imposible de cumplir".format(
+                cfg.ronda.duracion_ms, cfg.conteo_acopio.permanencia_minima_ms)
+        )
     return None
 
 
@@ -1125,6 +1168,18 @@ def avisos_config(cfg: ConfigVision) -> list[str]:
             "criterio".format(
                 ", ".join(sorted(ajustadas)), ventana_largo_mm, ventana_fondo_mm,
                 tolerancia_mm, umbral_mm, tam.fondo_mm)
+        )
+    if cfg.ronda.preparacion_ms < 5000:
+        avisos.append(
+            "ronda.preparacion_ms está en {} ms: sirve para probar sin esperar, pero "
+            "no es un tiempo de preparación de competencia. Con este valor la ronda "
+            "pasa a RUNNING casi de inmediato.".format(cfg.ronda.preparacion_ms)
+        )
+    if cfg.ronda.preparacion_ms > cfg.ronda.duracion_ms:
+        avisos.append(
+            "ronda.preparacion_ms ({} ms) es mayor que ronda.duracion_ms ({} ms): se "
+            "prepara más tiempo del que se juega. No es imposible, pero casi siempre "
+            "es un cero de más.".format(cfg.ronda.preparacion_ms, cfg.ronda.duracion_ms)
         )
     if cfg.conteo_acopio.permanencia_minima_ms == 0:
         avisos.append(

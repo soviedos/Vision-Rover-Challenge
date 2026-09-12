@@ -100,6 +100,31 @@ class CuboEnMundo:
 
 
 @dataclass(frozen=True, slots=True)
+class RelojRonda:
+    """El cronómetro oficial de la ronda en un instante, en milisegundos.
+
+    Viaja **dentro del estado del mundo**, y no se le pregunta al árbitro desde
+    el publicador. El estado es lo único que cruza de productores a consumidores
+    (CLAUDE.md, sección 3), y abrir una segunda vía obligaría a poner candados
+    donde hoy no hacen falta: el publicador corre en otro hilo.
+
+    Los tres valores son del **mismo instante** que el `ts_ms` del estado que los
+    lleva, así que un cliente resuelve con **un** mensaje y sin memoria en qué
+    punto de la ronda está. Se publican los tres, en vez de uno y una resta,
+    porque cada fase tiene una pregunta distinta: en READY interesa cuánto falta
+    para moverse, en RUNNING cuánto queda, y al terminar interesa **cuánto
+    tardó**, que es `transcurrido_ms`.
+
+    `total_ms` en cero significa que **no se está contando nada**: es lo que
+    distingue "esta fase no cuenta" de "cuenta y va en cero".
+    """
+
+    transcurrido_ms: int = 0
+    restante_ms: int = 0
+    total_ms: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class EstadoMundo:
     """La cancha en un instante. Inmutable, y lo único que cruza al otro lado.
 

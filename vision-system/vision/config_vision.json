@@ -164,6 +164,14 @@
     "permanencia_minima_ms": 1000,
     "_nota_permanencia": "Cuánto tiene que sostenerse un cubo dentro de su zona para darlo por contado. Existe para que el contador NO TITILE cuando el cubo queda justo en el borde del criterio: ahí, un jitter de detección de medio milímetro alcanzaría para que la cuenta saltara entre 2 y 3 varias veces por segundo, y eso en pantalla se lee como un sistema roto. NO está para tapar detecciones malas: una detección no confiable ya la filtra el seguimiento antes, conservando la última posición buena. Si un rover saca el cubo, la cuenta baja de inmediato: la permanencia solo demora ENTRAR, nunca SALIR."
   },
+  "ronda": {
+    "_acerca_de": "Los dos tiempos de una ronda, en milisegundos (vision/sistema.py, clase Arbitro). La visión es árbitro de verdad: lleva el cronómetro oficial, pasa de READY a RUNNING sola y cierra la ronda sola. Los tiempos van declarados acá y no incrustados en el código porque son reglas de competencia, y porque probar el sistema sin esperar un minuto real exige poder bajarlos.",
+    "preparacion_ms": 60000,
+    "_nota_preparacion": "Cuánto dura READY. Al llegar a cero la ronda pasa a RUNNING SOLA, y no hay tecla que lo adelante: si se pudiera adelantar, el tiempo de preparación igual para todos los equipos sería decorativo.",
+    "duracion_ms": 600000,
+    "_nota_duracion": "Cuánto dura RUNNING. Al agotarse, la ronda se cierra con motivo `tiempo_agotado`. También puede cerrarse antes, con motivo `reto_cumplido`, si los tres cubos quedan en posición.",
+    "_RELOJ_MONOTONO": "El cronómetro oficial se mide con reloj MONÓTONO, nunca con el de pared: un ajuste de hora del sistema —o un servidor de tiempo corrigiendo la máquina en mitad de una ronda— no puede alterar un tiempo de competencia. El `ts_ms` del mensaje sigue siendo de pared, como manda el contrato: son dos relojes con dos trabajos distintos."
+  },
   "deteccion_rovers": {
     "_acerca_de": "Detección de rovers a partir de su marcador ArUco (vision/detectors/rovers.py). Qué marcador es un rover NO se declara acá: es rover todo marcador que NO sea una esquina de `marcadores_esquina.disposicion`. Así la regla no se rompe si mañana las esquinas fueran otras, y no hay una lista de IDs de rover que mantener sincronizada con la realidad.",
     "ids_rover": [

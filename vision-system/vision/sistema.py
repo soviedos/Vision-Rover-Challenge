@@ -54,7 +54,7 @@ try:  # como paquete
     from .geometry.distorsion import (
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
-    from .mundo import FASES, VERSION_PROTOCOLO
+    from .mundo import VERSION_PROTOCOLO, RelojRonda
     from .publish.puerto import ErrorPuerto
     from .publish.telemetria import PublicadorTelemetria
     from .reglas.acopio import ContadorAcopio
@@ -76,7 +76,9 @@ except ImportError:  # como script suelto
     from vision.geometry.distorsion import (  # type: ignore[no-redef]
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
-    from vision.mundo import FASES, VERSION_PROTOCOLO  # type: ignore[no-redef]
+    from vision.mundo import (  # type: ignore[no-redef]
+        VERSION_PROTOCOLO, RelojRonda,
+    )
     from vision.publish.puerto import ErrorPuerto  # type: ignore[no-redef]
     from vision.publish.telemetria import PublicadorTelemetria  # type: ignore[no-redef]
     from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
@@ -103,42 +105,212 @@ def primera_altura(fuente, tiempo_max: float = 5.0) -> int:
         time.sleep(0.01)
     return 720
 
-#: Transiciones válidas de la ronda. La visión es árbitro y esta es su voz.
+#: Por qué terminó una ronda. Viaja al acta: sin motivo escrito, un cronómetro
+#: en pantalla no sirve para revisar nada cuando un equipo reclama.
+MOTIVO_RETO = "reto_cumplido"
+MOTIVO_TIEMPO = "tiempo_agotado"
+MOTIVO_OPERADOR = "detenida_por_operador"
+MOTIVO_ABORTADA = "abortada_en_preparacion"
+
+#: Transiciones que dispara UNA PERSONA desde el teclado.
+#:
+#: `start` no está, y su ausencia es la regla más importante de este mapa: el
+#: paso de READY a RUNNING lo hace el reloj, no una tecla. Si se pudiera
+#: adelantar, el tiempo de preparación igual para todos los equipos sería
+#: decorativo, y con él la razón de que la visión lleve el cronómetro.
+#:
+#: `ready` tampoco se acepta ya desde READY. Con cuenta regresiva, volver a
+#: apretarlo la reiniciaría: sería estirar la preparación apretando una tecla.
+#: Para rehacerla hay que abortar a IDLE y volver a entrar, que deja rastro.
 _TRANSICIONES = {
-    "ready": ("READY", ("IDLE", "FINISHED", "READY")),
-    "start": ("RUNNING", ("READY",)),
+    "ready": ("READY", ("IDLE", "FINISHED")),
     "stop": ("FINISHED", ("RUNNING",)),
+    "abort": ("IDLE", ("READY", "FINISHED")),
 }
+
+#: Las otras dos transiciones las dispara el reloj, en `tictac`:
+#:     READY  -> RUNNING    al agotarse la preparación
+#:     RUNNING -> FINISHED  al agotarse la ronda, o al cumplirse el reto
+_AUTOMATICAS = ("READY -> RUNNING", "RUNNING -> FINISHED")
 
 
 class Arbitro:
-    """La fase de la ronda. La visión es árbitro y tiene que ser una sola voz.
+    """La fase de la ronda y su cronómetro oficial. La visión arbitra de verdad.
 
-    Se protege con un candado porque la escribe el hilo del teclado y la lee el
-    de proceso. Es un dato chiquito, pero un dato compartido igual.
+    Tiene que ser una sola voz, así que se protege con un candado: la escriben el
+    hilo del teclado y el de proceso, y la lee el de proceso para armar el estado
+    del mundo.
 
-    Las transiciones son explícitas y las inválidas se rechazan avisando, en vez
-    de aceptarse en silencio: escribir `start` sin haber preparado la cancha es
-    un error de quien opera, y merece enterarse.
+    Dos relojes, dos trabajos
+    -------------------------
+    El cronómetro oficial se mide con `time.monotonic()`, **nunca con el de
+    pared**. Un ajuste de hora del sistema —un servidor de tiempo corrigiendo la
+    máquina en mitad de una ronda— no puede alterar un tiempo de competencia. El
+    `ts_ms` del mensaje sigue siendo de pared, porque el contrato lo promete así
+    y los equipos miden latencia con él.
+
+    El reloj se puede inyectar para poder verificar las transiciones sin esperar
+    diez minutos reales. No es un adorno de diseño: sin esa costura, la única
+    forma de probar el cierre por tiempo agotado sería dormir.
+
+    Las transiciones inválidas se rechazan avisando, en vez de aceptarse en
+    silencio: escribir `stop` sin ronda en juego es un error de quien opera, y
+    merece enterarse.
     """
 
-    def __init__(self, inicial: str = "IDLE"):
-        self._fase = inicial
+    def __init__(self, cfg: ConfigVision, inicial: str = "IDLE", reloj=time.monotonic):
+        if inicial not in ("IDLE", "READY"):
+            # Arrancar en RUNNING produciría una ronda que PARECE válida y no lo
+            # es: sin preparación, sin cronómetro desde cero y sin acta de
+            # arranque. Para probar sin cancha se entra en READY y se espera, o
+            # se baja `ronda.preparacion_ms`, que para eso está declarado.
+            raise ValueError(
+                "fase inicial {!r}: solo se puede arrancar en IDLE o READY".format(inicial))
+        self._cfg = cfg
+        self._reloj = reloj
         self._lock = threading.Lock()
+        self._fase = "IDLE"
+        #: Cuándo empezó a contar la fase actual, en tiempo monótono.
+        self._inicio: float | None = None
+        #: Cuánto dura la fase actual. En cero, esta fase no cuenta nada.
+        self._total_ms = 0
+        #: El tiempo final, congelado al cerrar. Es lo que hace que el
+        #: cronómetro se DETENGA a la vista en vez de seguir corriendo.
+        self._final_ms: int | None = None
+        self._motivo: str | None = None
+        #: Si el reto se vio INCOMPLETO alguna vez durante esta ronda. Sin esto,
+        #: una ronda que arranca con los tres cubos ya puestos —porque nadie los
+        #: sacó de la anterior— se cerraría sola al segundo, con un tiempo de un
+        #: segundo. El cierre por reto cumplido exige haber pasado de incompleto
+        #: a completo DURANTE la ronda.
+        self._vio_incompleto = False
+        if inicial == "READY":
+            self._entrar("READY")
+
+    # -- lectura ----------------------------------------------------------
 
     @property
     def fase(self) -> str:
         with self._lock:
             return self._fase
 
+    @property
+    def motivo(self) -> str | None:
+        """Por qué terminó la ronda, o `None` si no terminó."""
+        with self._lock:
+            return self._motivo
+
+    @property
+    def tiempo_final_ms(self) -> int | None:
+        """El tiempo oficial de la ronda cerrada, o `None` si sigue abierta."""
+        with self._lock:
+            return self._final_ms
+
+    def reloj(self) -> RelojRonda:
+        """El cronómetro ahora, para que viaje dentro del estado del mundo."""
+        with self._lock:
+            return self._reloj_actual()
+
+    # -- escritura --------------------------------------------------------
+
     def intentar(self, comando: str) -> str:
+        """Aplica una transición pedida por una persona."""
         destino, desde = _TRANSICIONES[comando]
         with self._lock:
             if self._fase not in desde:
                 return "'{}' no es válido desde {} (se puede desde {})".format(
                     comando, self._fase, list(desde))
-            anterior, self._fase = self._fase, destino
+            anterior = self._fase
+            if destino == "FINISHED":
+                self._cerrar(MOTIVO_OPERADOR)
+            elif destino == "IDLE":
+                motivo = MOTIVO_ABORTADA if anterior == "READY" else None
+                self._entrar("IDLE")
+                self._motivo = motivo
+            else:
+                self._entrar(destino)
             return "fase: {} -> {}".format(anterior, destino)
+
+    def tictac(self) -> str | None:
+        """Deja que el reloj haga lo suyo. Se llama una vez por cuadro.
+
+        Devuelve el aviso de la transición si hubo una, o `None`. Vive en el
+        hilo de proceso y no en un temporizador aparte porque una ronda que
+        avanza sin cuadros no tendría sentido: si la cámara se cayó, lo que hace
+        falta es que alguien mire la pantalla, no que el reloj siga solo.
+        """
+        with self._lock:
+            if self._inicio is None or self._final_ms is not None:
+                return None
+            if self._transcurrido_ms() < self._total_ms:
+                return None
+            if self._fase == "READY":
+                self._entrar("RUNNING")
+                return "fase: READY -> RUNNING (se agotó la preparación)"
+            if self._fase == "RUNNING":
+                self._cerrar(MOTIVO_TIEMPO)
+                return "fase: RUNNING -> FINISHED (se agotó el tiempo)"
+            return None
+
+    def observar_reto(self, completo: bool, instante: float | None) -> str | None:
+        """Le informa al árbitro cómo está el reto, y él decide si cerrar.
+
+        `instante` es el tiempo monótono de la **entrada del último cubo**, no el
+        del cumplimiento de la permanencia. El contador exige un segundo
+        sostenido para no titilar; tomar el tiempo oficial ahí le costaría ese
+        segundo a todos los equipos por igual, que es lo mismo que decir que el
+        cronómetro está mal calibrado.
+        """
+        with self._lock:
+            if self._fase != "RUNNING" or self._final_ms is not None:
+                return None
+            if not completo:
+                self._vio_incompleto = True
+                return None
+            if not self._vio_incompleto:
+                # Los cubos ya estaban puestos al arrancar. No se cierra: que el
+                # reto se cumpla es que alguien lo cumpla durante la ronda.
+                return None
+            self._cerrar(MOTIVO_RETO, instante)
+            return "fase: RUNNING -> FINISHED (reto cumplido)"
+
+    # -- interno (siempre con el candado tomado) --------------------------
+
+    def _entrar(self, destino: str) -> None:
+        duraciones = {"READY": self._cfg.ronda.preparacion_ms,
+                      "RUNNING": self._cfg.ronda.duracion_ms}
+        self._fase = destino
+        self._total_ms = duraciones.get(destino, 0)
+        self._inicio = self._reloj() if self._total_ms else None
+        self._final_ms = None
+        self._motivo = None
+        if destino != "RUNNING":
+            self._vio_incompleto = False
+
+    def _cerrar(self, motivo: str, instante: float | None = None) -> None:
+        transcurrido = self._transcurrido_ms(instante)
+        self._fase = "FINISHED"
+        self._final_ms = transcurrido
+        self._motivo = motivo
+
+    def _transcurrido_ms(self, instante: float | None = None) -> int:
+        if self._inicio is None:
+            return 0
+        ahora = self._reloj() if instante is None else instante
+        return max(0, int(round((ahora - self._inicio) * 1000.0)))
+
+    def _reloj_actual(self) -> RelojRonda:
+        if self._final_ms is not None:
+            transcurrido = self._final_ms
+        elif self._inicio is None:
+            return RelojRonda()
+        else:
+            transcurrido = min(self._transcurrido_ms(), self._total_ms)
+        return RelojRonda(
+            transcurrido_ms=transcurrido,
+            restante_ms=max(0, self._total_ms - transcurrido),
+            total_ms=self._total_ms,
+        )
 
 
 def abrir_fuente(cfg: ConfigVision, args):
@@ -276,8 +448,12 @@ def _hilo_teclado(arbitro: Arbitro, salir: threading.Event) -> None:
             return
         if comando in _TRANSICIONES:
             print("[fase] " + arbitro.intentar(comando), flush=True)
+        elif comando == "start":
+            print("[fase] 'start' ya no existe: de READY a RUNNING pasa el reloj, no "
+                  "una tecla. Adelantarlo le daría a un equipo menos preparación que "
+                  "al resto.", flush=True)
         elif comando:
-            print("[fase] comandos: ready | start | stop | quit", flush=True)
+            print("[fase] comandos: ready | stop | abort | quit", flush=True)
     salir.set()
 
 
@@ -288,7 +464,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="correr SIN cámara, con imágenes generadas (hay que pedirlo)")
     parser.add_argument("--indice", type=int, default=None, help="índice de cámara")
     parser.add_argument("--camara", default=None, help="nombre del perfil de calibración")
-    parser.add_argument("--fase", choices=FASES, default="IDLE", help="fase inicial")
+    parser.add_argument("--fase", choices=("IDLE", "READY"), default="IDLE",
+                        help="fase inicial; RUNNING no se acepta, porque saltear la "
+                             "preparación produce una ronda que parece válida y no lo es")
     parser.add_argument("--duracion", type=float, default=0.0,
                         help="segundos a correr; 0 = hasta 'quit' o Ctrl-C")
     parser.add_argument("--ventana", action="store_true",
@@ -308,7 +486,7 @@ def main(argv: list[str] | None = None) -> int:
     if matriz is None:  # fuente sintética: la matriz es la de su propia cámara
         matriz = fuente.verdad.camara.matriz
 
-    arbitro = Arbitro(args.fase)
+    arbitro = Arbitro(cfg, args.fase)
     seguidor = Seguidor(cfg)
     contador = ContadorAcopio(cfg)
     anclaje = AnclajeCancha(cfg)
@@ -337,7 +515,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  ##################################################################")
     print("Cancha: {}x{} celdas de {:.0f} mm".format(
         cfg.tablero.cols, cfg.tablero.rows, cfg.tablero.cell_mm))
-    print("Comandos: ready | start | stop | quit")
+    print("Comandos: ready | stop | abort | quit   (de READY a RUNNING pasa solo)")
     for aviso in avisos_config(cfg):
         # No impiden arrancar —para eso está `revisar_config`— pero tienen que
         # verse. El detalle completo, con `python -m vision.tools.verificar_config`.
@@ -372,6 +550,12 @@ def main(argv: list[str] | None = None) -> int:
                 time.sleep(0.005)
                 continue
             cuadros += 1
+            # El reloj de la ronda avanza con los cuadros y no en un temporizador
+            # aparte: una ronda que sigue corriendo sin que la cámara vea nada no
+            # es una ronda, es un cronómetro solo.
+            aviso_fase = arbitro.tictac()
+            if aviso_fase:
+                print("[fase] " + aviso_fase, flush=True)
             sistema_actual = None
             # ---- falla abierto -------------------------------------------
             # Si un cuadro no se puede procesar, NO se toca la casilla y se

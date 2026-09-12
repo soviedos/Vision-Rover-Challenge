@@ -446,7 +446,11 @@ class Vista:
         if not self._abierta:
             return None
         codigo = cv2.waitKey(1) & 0xFF
-        return {ord("r"): "ready", ord("s"): "start", ord("f"): "stop",
+        # No hay tecla para `start`: el paso de READY a RUNNING es automático y
+        # poder adelantarlo volvería decorativo el tiempo de preparación igual
+        # para todos. `a` aborta la preparación y vuelve a IDLE, porque alguna
+        # vez algo va a salir mal antes de empezar.
+        return {ord("r"): "ready", ord("f"): "stop", ord("a"): "abort",
                 ord("q"): "quit", 27: "quit"}.get(codigo)
 
     def cerrar(self) -> None:

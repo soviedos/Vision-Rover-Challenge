@@ -343,6 +343,9 @@ otra terminal:
 
 ## Referencias
 
+- **Con la cancha montada y la cámara lista, para correr una ronda:**
+  [`OPERACION.md`](OPERACION.md). El ciclo de una ronda, los comandos, las dos
+  guardas que impiden arbitrar sin ver la cancha, y el acta.
 - **Con la cancha ya montada, el paso siguiente es dejar la cámara lista:**
   [`PUESTA_A_PUNTO.md`](PUESTA_A_PUNTO.md). Ahí está el procedimiento completo
   —imprimir el patrón, calibrar la distorsión y medir la precisión—, incluida

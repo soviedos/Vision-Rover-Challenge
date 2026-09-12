@@ -7,11 +7,29 @@ después. **Solo lee** el estado del mundo; nunca lo modifica.
 
 ### El acta de la ronda — `acta.py`
 
-Se escribe **una por ronda cerrada**, incluidas las abortadas, en `actas/`.
-Guarda cuándo fue, por qué terminó —reto cumplido, tiempo agotado, la cerró el
-operador, abortada en preparación—, el tiempo final, cuántos cubos quedaron en
-posición y cuáles, las posiciones finales, y en qué estado estaban los cubos al
-empezar a jugar.
+Se escribe **una por ronda cerrada**, incluidas las abortadas, en
+**`vision/actas/`**, con nombre `acta_AAAAMMDD_HHMMSS.json`.
+
+Guarda cuándo fue y **por qué terminó**, que son cinco motivos posibles:
+`reto_cumplido`, `tiempo_agotado`, **`geometria_perdida`** —más de un par de
+segundos seguidos sin ver la cancha—, `detenida_por_operador` y
+`abortada_en_preparacion`.
+
+Además: el tiempo final, cuántos cubos quedaron en posición y cuáles —con su
+veredicto, cuánto le faltaba a cada uno y la **edad** del dato sobre el que se
+decidió—, las posiciones finales, **con qué perfil de cámara se juzgó**, cuántas
+veces se perdió la cancha de vista y **cuánto duró la peor**, y en qué estado
+estaban los cubos al empezar a jugar.
+
+Dos reglas duras:
+
+- **Una ronda sin geometría no genera acta.** La guarda vive dentro de
+  `escribir_acta` y no solo en quien la llama, porque es la clase de regla que un
+  llamador futuro saltea sin darse cuenta. Si el sistema nunca vio la cancha, no
+  hay nada que certificar.
+- **Las rondas sintéticas salen marcadas** con `NO_ES_UNA_RONDA_REAL` en el nivel
+  de arriba: tienen exactamente la misma forma que una de verdad, y esa es justo
+  la clase de documento que parece válido y no lo es.
 
 **Sin acta hay un cronómetro en pantalla y nada que revisar.** Cuando un equipo
 reclame, la única respuesta posible sería la memoria de quien miraba.

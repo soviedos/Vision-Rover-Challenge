@@ -71,8 +71,13 @@ Vision-Rover-Challenge/          # raíz del repositorio (fork)
 ├── README.md, reglamento.md, robot.md   # de CENFOTEC — intocables
 ├── archivos_fabricacion/, codigos/      # de CENFOTEC — intocables
 └── vision-system/               # TODO nuestro trabajo vive acá
-    ├── CLAUDE.md                # este archivo
+    ├── CLAUDE.md                # este archivo: las reglas del proyecto
+    ├── README.md                # cómo está armado el sistema
+    ├── MONTAJE.md               # armar la cancha y pegar los marcadores
+    ├── PUESTA_A_PUNTO.md        # dejar lista una cámara
+    ├── OPERACION.md             # correr una ronda
     ├── .gitignore
+    ├── actas/                   # una por ronda cerrada; NO se versiona
     ├── contrato/                # independiente; entregable a los equipos por sí solo
     └── vision/                  # depende de contrato/, nunca al revés
 ```
@@ -124,9 +129,24 @@ documento.** De ahí que no se escriba acta de una ronda sin geometría.
 - **`READY → RUNNING` es automática** y **no se puede adelantar con el teclado**:
   ahí vive la igualdad de tiempo de preparación entre equipos. El comando
   `start` no existe.
-- **`RUNNING → FINISHED` es automática** por tiempo agotado o por reto cumplido.
-  El tiempo del reto se toma en la **entrada del último cubo**, no cuando se
-  cumple la permanencia mínima del contador.
+- **`RUNNING → FINISHED` es automática** por **tres** causas: tiempo agotado,
+  reto cumplido, o **geometría perdida** —más de `ronda.geometria_perdida_ms`
+  seguidos sin ver la cancha—. El tiempo del reto se toma en la **entrada del
+  último cubo**, no cuando se cumple la permanencia mínima del contador.
+- **Cinco motivos de cierre**, y el acta los registra: `reto_cumplido`,
+  `tiempo_agotado`, `geometria_perdida`, `detenida_por_operador` y
+  `abortada_en_preparacion`.
+- **Comandos de una persona: `ready`, `stop`, `abort`.** `abort` cancela la
+  preparación y vuelve a `IDLE`. `ready` **no** se acepta desde `READY`: con
+  cuenta regresiva en marcha, volver a apretarlo la reiniciaría.
+- **Dos guardas para poder arbitrar**, que se cobran al entrar en `READY` y en
+  el arranque automático: que se vean las coordenadas, y que el perfil de cámara
+  no deforme. Sin ellas la ronda podía empezar a ciegas.
+- **No se puede arrancar en `RUNNING`:** `--fase` solo acepta `IDLE` y `READY`, y
+  `--fase READY` es una **intención diferida** que pasa por la misma guarda.
+- **El cronómetro no se pausa** durante una pérdida de geometría: el tiempo de
+  competencia corre aunque el árbitro parpadee, y pausarlo volvería explotable
+  tapar un marcador.
 - El cronómetro se mide con **reloj monótono**; el `ts_ms` del mensaje sigue
   siendo de pared. Dos relojes, dos trabajos.
 - Los tres tiempos de la ronda —preparación, duración y cuánta ceguera se
@@ -218,6 +238,14 @@ documento.** De ahí que no se escriba acta de una ronda sin geometría.
   deducida de los cuatro marcadores más la **altura conocida** del objeto.
 - **Oclusión:** un objeto tapado **mantiene su última posición** con su **edad creciendo**.
   **Nunca** hacerlo parpadear entre existir y no existir.
+- **Marcadores inventados:** el detector de ArUco encuentra códigos donde no hay
+  ninguno, sobre la cuadrícula del tablero —medido: 28 a 54 por minuto—. Se
+  atajan **en cadena, y el orden importa**: refinamiento **subpíxel** de
+  esquinas → filtro de **tamaño** (derivado de `lado_mm × factor de paralaje`, no
+  escrito a mano) → filtro de **posición** → resolución de **IDs duplicados** por
+  plausibilidad → **admisión por persistencia** de identidades nuevas. Cada
+  rechazo **se cuenta y se informa**: un filtro mudo que empieza a rechazar
+  marcadores de verdad es indistinguible de una cámara que dejó de verlos.
 
 ### Cómo consumen los equipos
 - Los equipos **NO importan `schema.py`**: consumen el **JSON crudo**.

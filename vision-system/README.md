@@ -322,6 +322,7 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
     ├── README.md                    # este documento
     ├── MONTAJE.md                   # guía para armar la cancha física
     ├── PUESTA_A_PUNTO.md            # guía para dejar lista una cámara
+    ├── OPERACION.md                 # guía para correr una ronda
     ├── CLAUDE.md                    # las reglas del proyecto
     ├── .gitignore
     │
@@ -902,5 +903,8 @@ configuración**, junto al valor: `vision/config_vision.json` distingue lo
   la disposición exacta de los marcadores, la regla del margen blanco y una
   comprobación para hacer antes de la primera ronda. Pegar los marcadores en otro
   orden rota todas las coordenadas, y el sistema no se queja.
+- **Si vas a correr una ronda:** leé **[`OPERACION.md`](OPERACION.md)**. El ciclo
+  completo, los comandos, por qué el cronómetro no se pausa, las dos guardas que
+  impiden arbitrar a ciegas, los cinco motivos de cierre y qué trae el acta.
 
 El trabajo va en la rama **`desarrollo`**; `main` queda como llegó del fork.

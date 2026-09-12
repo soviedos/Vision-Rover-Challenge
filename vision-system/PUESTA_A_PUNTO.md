@@ -520,6 +520,14 @@ diferencia se apoyan las defensas del sistema.
 
 ### 7.2 — Qué hace el sistema, sin que tengas que tocar nada
 
+Antes que nada, **afina las esquinas**: el refinamiento subpíxel corrige el sesgo
+con que se localizan, y es lo que hace confiable la medida de tamaño en la que se
+apoya todo lo demás. Sin él, el marcador del rover se medía 39,2 mm contra 41,6
+esperados; con él, la dispersión de cada esquina cae a un tercio. Se activa en
+`deteccion_marcadores.refinamiento_esquinas` y ya viene puesto.
+
+Después:
+
 1. **Los mide.** Con la homografía sabe cuánto mide cada marcador detectado
    **en milímetros sobre el tablero**, y rechaza lo que no se parezca al tamaño
    que corresponde a ese ID. El tamaño esperado no está escrito a mano: se
@@ -586,6 +594,7 @@ poder compararlos con los de otro día.
 | La calibración da **MALA** y el patrón está plano | Poca variedad de vistas | Repetí cubriendo las nueve zonas y las cuatro inclinaciones |
 | A la derecha se ve **peor** que a la izquierda | Cargaste el perfil de otra cámara | Poné tu nombre exacto en `--camara` |
 | `faltan marcadores de esquina` | Uno tapado, cortado o mal iluminado | Ver [`MONTAJE.md`](MONTAJE.md), sección 2 |
+| **No me deja preparar la ronda** (apretás `r` y no pasa nada) | O no se ven las coordenadas, o el perfil cargado no es el de esta cámara | El panel dice cuál de las dos. Ver [`OPERACION.md`](OPERACION.md), sección 4 |
 
 **Regla general:** si un paso no da lo que este manual dice que tiene que dar,
 **no sigas al siguiente**. Cada paso se apoya en el anterior, y un error
@@ -601,6 +610,7 @@ curiosidad o si algo no salió como esperabas.
 | Si querés saber… | Leé |
 |---|---|
 | Dónde va cada marcador y por qué el orden importa | [`MONTAJE.md`](MONTAJE.md) |
+| Cómo se corre una ronda: comandos, cronómetro, guardas y acta | [`OPERACION.md`](OPERACION.md) |
 | Todas las opciones de cada herramienta, y el porqué de cada decisión | [`vision/tools/README.md`](vision/tools/README.md) |
 | Cómo funciona por dentro el sistema de perfiles y la corrección del lente | [`vision/geometry/README.md`](vision/geometry/README.md) |
 | Cómo elige el sistema qué cámara abrir | [`vision/sources/README.md`](vision/sources/README.md) |

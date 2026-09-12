@@ -667,8 +667,13 @@ def main(argv: list[str] | None = None) -> int:
 
             # ---- la vista ------------------------------------------------
             if vista is not None and vista.toca_dibujar(time.monotonic()):
+                # La fase y el reloj, del MISMO instante: en dos llamadas
+                # sueltas podrían caer a los lados de una transición y el panel
+                # mostraría una fase con el cronómetro de otra.
+                fase_panel, reloj_panel = arbitro.instantanea()
                 vista.dibujar(cuadro.imagen, sistema_actual, ultimo_estado, {
-                    "fase": arbitro.fase, "sintetico": args.sintetico,
+                    "fase": fase_panel, "reloj": reloj_panel,
+                    "motivo": arbitro.motivo, "sintetico": args.sintetico,
                     "clientes": publicador.clientes, "emitidos": publicador.emitidos,
                     "acopio": acopio,
                     "fps": fuente.fps_real, "fallos": fallos,

@@ -42,6 +42,10 @@ import numpy as np
 try:  # como paquete
     from .configuracion import ConfigVision, geometrias_deposito
     from .mundo import VERSION_PROTOCOLO
+    # El formateador de tiempo se trae de donde ya vive, en vez de escribir otro
+    # acá: si la pantalla dijera 0:03 y el acta 00:03, alguien tendría que
+    # averiguar cuál de los dos miente.
+    from .record.acta import mmss
     from .tools.panel import (
         AMBAR, BLANCO, GRIS, ROJO, VERDE, Panel, Tipografia, escala_para, sin_acentos,
     )
@@ -50,6 +54,7 @@ except ImportError:  # como script suelto
         ConfigVision, geometrias_deposito,
     )
     from vision.mundo import VERSION_PROTOCOLO  # type: ignore[no-redef]
+    from vision.record.acta import mmss  # type: ignore[no-redef]
     from vision.tools.panel import (  # type: ignore[no-redef]
         AMBAR, BLANCO, GRIS, ROJO, VERDE, Panel, Tipografia, escala_para, sin_acentos,
     )
@@ -72,6 +77,12 @@ _SALIDA = (200, 200, 200)
 #: cuarto lugar donde hay que hacerse la misma pregunta y cuatro copias de un
 #: umbral son cuatro formas de que un día digan cosas distintas.
 _EDAD_VIEJA_MS = 200
+
+#: A partir de cuánto queda, el cronómetro de la ronda se dibuja en ámbar en vez
+#: de verde. Es una señal de PANTALLA y no una regla: no cambia nada de lo que el
+#: sistema hace, solo avisa al que mira que la ronda se está por terminar. Un
+#: minuto sobre diez es el último tramo en el que todavía se puede reaccionar.
+_RONDA_POR_TERMINAR_MS = 60_000
 
 #: Cuánto tiñe el relleno de una zona. Bajo a propósito: la zona es una ayuda
 #: para el operador, no puede taparle el video, que es lo que de verdad hay que
@@ -393,9 +404,39 @@ class Vista:
         panel.titulo("Sistema de visión · protocolo v{}".format(VERSION_PROTOCOLO))
         if info.get("sintetico"):
             panel.destacado("DATOS SINTÉTICOS", ROJO, "no es la cancha real")
-        panel.destacado(info.get("fase", "IDLE"), VERDE if info.get("fase") == "RUNNING" else BLANCO,
+        fase = info.get("fase", "IDLE")
+        panel.destacado(fase, VERDE if fase == "RUNNING" else BLANCO,
                         "{} cliente(s) conectado(s)".format(info.get("clientes", 0)))
         acopio = info.get("acopio")
+
+        # El cronómetro va en grande: es lo que miran el operador y los equipos,
+        # y tiene que leerse de reojo, sin buscarlo. En IDLE no se dibuja, porque
+        # no se está contando nada y un 0:00 ahí parecería una ronda por terminar.
+        reloj = info.get("reloj")
+        if reloj is not None and reloj.total_ms:
+            if fase == "READY":
+                panel.destacado("empieza en {}".format(mmss(reloj.restante_ms)), AMBAR,
+                                "preparación · el paso a RUNNING es automático")
+            elif fase == "RUNNING":
+                panel.destacado(
+                    "quedan {}".format(mmss(reloj.restante_ms)),
+                    VERDE if reloj.restante_ms > _RONDA_POR_TERMINAR_MS else AMBAR,
+                    "de {} de ronda".format(mmss(reloj.total_ms)))
+            else:
+                motivo = (info.get("motivo") or "").replace("_", " ")
+                panel.destacado(mmss(reloj.transcurrido_ms), BLANCO,
+                                "tiempo final{}".format(" · " + motivo if motivo else ""))
+
+        # Un cubo que ya está en su zona durante la preparación es un arranque
+        # irregular: la ronda empezaría con parte del reto hecho. No se impide
+        # —el acta lo registra y se decide después— pero tiene que verse ACÁ,
+        # que es el único momento en que todavía se puede corregir.
+        if fase == "READY" and acopio is not None:
+            ya_dentro = [z.color for z in acopio.zonas if z.adentro]
+            if ya_dentro:
+                panel.destacado("CUBOS YA EN ZONA", ROJO,
+                                "{} · sacalos antes de que empiece".format(", ".join(ya_dentro)))
+
         if acopio is not None and acopio.completo:
             panel.destacado("RETO COMPLETADO", VERDE,
                             "los {} cubos en su zona".format(acopio.total))
@@ -429,7 +470,7 @@ class Vista:
             info.get("fps", 0.0), info.get("emitidos", 0)), GRIS)
         if info.get("fallos"):
             panel.datos("cuadros no procesados: {}".format(info["fallos"]), AMBAR)
-        panel.pie("r ready · s start · f stop · q salir")
+        panel.pie("r ready · f stop · a abort · q salir")
         panel.dibujar(lienzo)
 
     # -- teclado y cierre --------------------------------------------------

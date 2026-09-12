@@ -118,6 +118,7 @@ class DeteccionMarcadores:
     con el ID. Por eso no depende de la cancha ni de la cámara.
     """
 
+    cuadros_para_admitir_rover: int
     refinamiento_esquinas: str
     tolerancia_tamano: float
     margen_fuera_de_cancha_celdas: float
@@ -780,6 +781,7 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
 
     dm = d["deteccion_marcadores"]
     deteccion_marcadores = DeteccionMarcadores(
+        cuadros_para_admitir_rover=int(dm["cuadros_para_admitir_rover"]),
         refinamiento_esquinas=str(dm["refinamiento_esquinas"]).lower(),
         tolerancia_tamano=float(dm["tolerancia_tamano"]),
         margen_fuera_de_cancha_celdas=float(dm["margen_fuera_de_cancha_celdas"]),
@@ -1160,6 +1162,12 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         return (
             "marcadores_esquina.borde_blanco_mm debe ser > 0: sin zona blanca alrededor "
             "el detector de ArUco no encuentra el marcador"
+        )
+    if cfg.deteccion_marcadores.cuadros_para_admitir_rover < 1:
+        return (
+            "deteccion_marcadores.cuadros_para_admitir_rover tiene que ser >= 1: es "
+            "cuántos cuadros seguidos hay que ver un rover nuevo antes de aceptarlo, y "
+            "con 0 no habría nada que sostener"
         )
     if cfg.deteccion_marcadores.refinamiento_esquinas not in REFINAMIENTOS:
         return (

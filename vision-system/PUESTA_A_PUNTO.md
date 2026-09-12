@@ -530,6 +530,14 @@ diferencia se apoyan las defensas del sistema.
    sistema mide los dos candidatos y se queda con el que se parece al marcador
    que espera; si no puede decidir, descarta el cuadro y conserva el último
    estado bueno.
+4. **Les exige que se sostengan.** Un robot que entra a la cancha tiene que
+   verse **3 cuadros seguidos** —unos 100 ms— antes de que el sistema acepte que
+   existe. Un fantasma no lo consigue: dura 1 o 2 cuadros y salta a otro lado.
+   Lo vas a notar una sola vez, al poner el robot: después, aunque se tape y
+   reaparezca, entra de inmediato, porque ya está en la memoria del sistema.
+
+Las tres primeras dependen de umbrales medidos **en esta cancha, con esta luz y
+esta altura de cámara**; la cuarta no depende de ninguno, y por eso está.
 
 ### 7.3 — Qué mirar vos
 

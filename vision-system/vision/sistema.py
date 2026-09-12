@@ -58,6 +58,7 @@ try:  # como paquete
     from .publish.puerto import ErrorPuerto
     from .publish.telemetria import PublicadorTelemetria
     from .reglas.acopio import ContadorAcopio
+    from .tracking.admision import RegistroAdmision
     from .tracking.seguimiento import Seguidor
     from .vista import Vista
     from .sources.camara import ErrorCamara, FuenteCamara
@@ -79,6 +80,7 @@ except ImportError:  # como script suelto
     from vision.publish.puerto import ErrorPuerto  # type: ignore[no-redef]
     from vision.publish.telemetria import PublicadorTelemetria  # type: ignore[no-redef]
     from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
+    from vision.tracking.admision import RegistroAdmision  # type: ignore[no-redef]
     from vision.tracking.seguimiento import Seguidor  # type: ignore[no-redef]
     from vision.vista import Vista  # type: ignore[no-redef]
     from vision.sources.camara import ErrorCamara, FuenteCamara  # type: ignore[no-redef]
@@ -169,7 +171,7 @@ def abrir_fuente(cfg: ConfigVision, args):
 
 
 def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, duplicados,
-             rechazos):
+             rechazos, admision, demorados):
     """De un cuadro al estado del mundo. Lanza si la geometría no se puede armar.
 
     Una sola pasada del detector de ArUco por cuadro: el mismo resultado sirve
@@ -191,6 +193,14 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, d
     por tamaño o por posición. Se cuentan y se informan por el mismo motivo:
     un filtro mudo que empieza a rechazar marcadores de verdad es
     indistinguible de una cámara que dejó de verlos.
+
+    `admision` es la última defensa, y la única que no depende de ningún margen
+    medido en esta escena: un ID de rover que el seguimiento **no** venía
+    siguiendo tiene que sostenerse varios cuadros seguidos antes de entrar. Va
+    después del tamaño y de los duplicados a propósito: los dos anteriores ya
+    sacaron del camino casi todo, y lo que llega acá es lo que aquellos no
+    supieron ver. `demorados` acumula `(id, cuadros)` de los que todavía
+    esperan, para poder informarlos.
 
     Devuelve `(sistema de coordenadas, estado del mundo)`. El sistema se devuelve
     porque la vista lo necesita para dibujar celdas sobre la imagen; el estado es
@@ -237,6 +247,11 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, d
     # en vez de descartarse en silencio.
     descartados.update(
         set(detectados) - cfg.marcadores_esquina.ids_esperados - cfg.deteccion_rovers.ids_rover)
+    # Una identidad de rover NUEVA tiene que sostenerse para existir. Se aplica
+    # acá, antes del anclaje, y solo afecta a los IDs de rover: demorar un
+    # marcador de esquina demoraría el sistema de coordenadas entero.
+    detectados, esperando = admision.filtrar(detectados, seguidor.ultimas_poses_rover())
+    demorados.extend(esperando)
     # El anclaje aguanta que falte UN marcador: conserva la homografía buena y usa
     # los tres visibles para comprobar que la cámara no se movió. Con dos o menos,
     # o si los tres la desmienten, lanza y el falla-abierto se hace cargo.
@@ -297,9 +312,11 @@ def main(argv: list[str] | None = None) -> int:
     seguidor = Seguidor(cfg)
     contador = ContadorAcopio(cfg)
     anclaje = AnclajeCancha(cfg)
+    admision = RegistroAdmision(cfg)
     descartados: set[int] = set()
     duplicados: list = []
     rechazos: list = []
+    demorados: list = []
     duplicados_totales = ambiguos = rechazos_totales = 0
     vista = None
     if args.ventana:
@@ -363,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 sistema_actual, estado = procesar(
                     cuadro, cfg, matriz, arbitro.fase, seguidor, anclaje, descartados,
-                    duplicados, rechazos)
+                    duplicados, rechazos, admision, demorados)
                 publicador.actualizar(estado)
                 ultimo_estado = estado
                 # El conteo va DESPUÉS de publicar y en su propio try: es para
@@ -452,6 +469,24 @@ def main(argv: list[str] | None = None) -> int:
                               if duplicados else "—"), flush=True)
                     duplicados.clear()
                     ambiguos = 0
+                if demorados:
+                    por_id: dict[int, int] = {}
+                    for id_demorado, racha in demorados:
+                        por_id[id_demorado] = max(por_id.get(id_demorado, 0), racha)
+                    esperando = admision.esperando
+                    print("[aviso] identidades de rover demoradas hasta sostenerse {} cuadros: "
+                          "{}. Es lo normal al poner un robot en la cancha —se paga una vez, "
+                          "unos {:.0f} ms— y es lo que impide que un fantasma invente un rover "
+                          "que no existe. {}".format(
+                              cfg.deteccion_marcadores.cuadros_para_admitir_rover,
+                              ", ".join("ID {} llegó a {} cuadro(s)".format(i, n)
+                                        for i, n in sorted(por_id.items())),
+                              1000.0 * cfg.deteccion_marcadores.cuadros_para_admitir_rover
+                              / max(fuente.fps_real, 1.0),
+                              ("SIGUEN esperando ahora mismo: {} — si hay un robot de verdad "
+                               "ahí, no se está viendo estable".format(sorted(esperando))
+                               if esperando else "Ninguna quedó esperando.")), flush=True)
+                    demorados.clear()
                 if descartados:
                     print("[aviso] marcadores vistos que NO son ni esquina ni rover "
                           "declarado, y por eso se descartan: {}. Si alguno es un robot "

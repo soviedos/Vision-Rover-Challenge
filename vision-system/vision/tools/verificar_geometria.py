@@ -37,6 +37,7 @@ try:  # como paquete
         resolver_duplicados,
     )
     from ..sources.generador_sintetico import MarcadorExtra, generar
+    from ..tracking.admision import RegistroAdmision
 except ImportError:  # como script suelto
     from vision.configuracion import Perspectiva, cargar_config  # type: ignore[no-redef]
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
@@ -53,6 +54,7 @@ except ImportError:  # como script suelto
     from vision.sources.generador_sintetico import (  # type: ignore[no-redef]
         MarcadorExtra, generar,
     )
+    from vision.tracking.admision import RegistroAdmision  # type: ignore[no-redef]
 
 
 def puntos_de_prueba(cols: int, rows: int, verdad) -> list[tuple[str, np.ndarray]]:
@@ -401,6 +403,79 @@ def verificar_duplicados(cfg, umbral_mm: float) -> bool:
     return todo_bien
 
 
+def verificar_admision(cfg) -> bool:
+    """Una identidad de rover NUEVA: ¿cuántos cuadros tiene que sostenerse?
+
+    Este bloque se prueba con **secuencias de cuadros escritas a mano** y no con
+    el generador, y la razón es honesta: el generador dibuja el mismo fantasma
+    idéntico en todos los cuadros, así que un fantasma sintético **se sostendría**
+    y sería admitido. Lo que hace que un fantasma no pase no es nada que el
+    generador sepa reproducir, es un hecho **medido en la cancha**: sobre 361
+    detecciones falsas en cuatro corridas, la racha más larga fue de **dos
+    cuadros**. La secuencia de acá reproduce esa racha medida.
+
+    La admisión mira solo identidades, no píxeles —de ahí que las esquinas del
+    marcador sean de relleno—, y eso es justamente lo que la hace la defensa que
+    **no depende de esta escena, esta luz ni esta altura de cámara**, al revés
+    que el margen del filtro de tamaño.
+    """
+    print("=" * 78)
+    print("ADMISIÓN: una identidad de rover nueva tiene que sostenerse")
+    print("=" * 78)
+
+    necesarios = cfg.deteccion_marcadores.cuadros_para_admitir_rover
+    id_rover = sorted(cfg.deteccion_rovers.ids_rover)[0]
+    id_esquina = sorted(cfg.marcadores_esquina.ids_esperados)[0]
+    relleno = np.zeros((4, 2), dtype=np.float32)
+
+    def correr(secuencia, ids, memoria):
+        """Devuelve en qué cuadros (1-based) entró el ID, con un registro nuevo."""
+        registro = RegistroAdmision(cfg)
+        entradas = []
+        for n, visible in enumerate(secuencia, start=1):
+            detectados = {i: relleno for i in ids} if visible else {}
+            aceptados, _ = registro.filtrar(detectados, memoria)
+            if all(i in aceptados for i in ids) and visible:
+                entradas.append(n)
+        return entradas
+
+    sin_memoria: dict = {}
+    con_memoria = {id_rover: (21.5, 21.5)}
+
+    casos = (
+        ("fantasma que dura 2 cuadros (la racha más larga MEDIDA)",
+         [True] * 2, (id_rover,), sin_memoria, []),
+        ("fantasma intermitente: 2 sí, 1 no, veinte veces",
+         [True, True, False] * 20, (id_rover,), sin_memoria, []),
+        ("rover de verdad que aparece y se queda 10 cuadros",
+         [True] * 10, (id_rover,), sin_memoria, list(range(necesarios, 11))),
+        ("rover YA seguido que reaparece tras una oclusión",
+         [True] * 3, (id_rover,), con_memoria, [1, 2, 3]),
+        ("marcador de ESQUINA nuevo: nunca se demora",
+         [True] * 3, (id_esquina,), sin_memoria, [1, 2, 3]),
+    )
+
+    print("  hacen falta {} cuadros seguidos; a 30 fps son {:.0f} ms, una sola vez.\n".format(
+        necesarios, 1000.0 * necesarios / 30.0))
+    print("  {:<52} {:>14} {:>14}  {}".format("situación", "entra en", "se esperaba", "estado"))
+    print("  " + "-" * 90)
+
+    todo_bien = True
+    for nombre, secuencia, ids, memoria, esperado in casos:
+        entradas = correr(secuencia, ids, memoria)
+        paso = entradas == esperado
+        todo_bien = todo_bien and paso
+        def cuadros(xs):
+            if not xs:
+                return "nunca"
+            return "cuadro {}".format(xs[0]) if len(xs) == 1 else "cuadros {}+".format(xs[0])
+        print("  {:<52} {:>14} {:>14}  {}".format(
+            nombre, cuadros(entradas), cuadros(esperado), "OK" if paso else "FALLA"))
+
+    print("\n  resultado: {}\n".format("TODO OK" if todo_bien else "HAY FALLAS"))
+    return todo_bien
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verifica el sistema de coordenadas contra la verdad del generador sintético."
@@ -430,6 +505,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.modo == "ambos":
         resultados.append(verificar_degradacion(cfg, args.umbral_mm))
         resultados.append(verificar_duplicados(cfg, args.umbral_mm))
+        resultados.append(verificar_admision(cfg))
 
     print("=" * 78)
     print("RESULTADO GENERAL: {}".format("TODO OK" if all(resultados) else "HAY FALLAS"))

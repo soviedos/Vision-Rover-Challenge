@@ -69,6 +69,33 @@ exactamente lo que el contrato promete para un objeto ocluido.
 Refrescar con esa detección sería publicar una posición que el propio sistema
 considera dudosa, y encima presentarla como fresca.
 
+## Admisión: una identidad nueva tiene que sostenerse
+
+`admision.py` es lo último que decide si un **ID de rover que el seguimiento no
+venía siguiendo** entra al estado del mundo: tiene que verse **3 cuadros
+seguidos**, unos 100 ms.
+
+El modo de falla que ataja es concreto y ya se vio de verdad. Un fantasma con el
+ID de un rover hace dos cosas distintas:
+
+| | Qué pasa | Quién lo resuelve |
+|---|---|---|
+| con el rover **presente** | colisiona con él: dos marcadores dicen ser el 10 | la resolución de duplicados, midiendo los dos |
+| con el rover **ausente** | no colisiona con nadie: **inventa un rover** que se publica con edad cero, o sea presentado como fresco | **esto** |
+
+**Solo se paga una vez**, al poner el robot en la cancha: un ID que ya está en la
+memoria del seguimiento entra **de inmediato**, incluso después de una oclusión
+larga —ya demostró que existe—, así que durante la ronda no cuesta nada. Y solo
+afecta a los rovers: demorar un marcador de **esquina** demoraría el sistema de
+coordenadas entero.
+
+**Por qué existe si el filtro de tamaño ya mata el 100 % de los fantasmas
+medidos.** Porque ese margen es una propiedad de **esta** escena, esta luz y esta
+altura de cámara, no del sistema: el fantasma más grande medido está a factor
+**1,9** del umbral, no a factor 10. Esta defensa no depende de ningún margen, sino
+de que un fantasma no se sostenga —sobre 361 detecciones falsas medidas, la racha
+más larga fue de **dos** cuadros—. Es la red, no la defensa principal.
+
 ## El barrido no es para oclusiones
 
 `edad_maxima_ms` saca de la lista lo que hace demasiado que no se ve. **No es

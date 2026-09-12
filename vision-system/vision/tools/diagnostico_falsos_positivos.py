@@ -395,6 +395,14 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _distribucion(valores) -> dict:
+    """Mínimo, mediana y máximo: con eso alcanza para una vara."""
+    v = np.asarray(valores, dtype=float)
+    return {"min": round(float(v.min()), 3),
+            "mediana": round(float(np.median(v)), 3),
+            "max": round(float(v.max()), 3)}
+
+
 def guardar_sesion(cfg, args, duracion, cuadros, sin_geometria, factores, crudos) -> None:
     """Guarda la sesión cruda, no el resumen.
 
@@ -405,12 +413,33 @@ def guardar_sesion(cfg, args, duracion, cuadros, sin_geometria, factores, crudos
 
     Va en `vision/mediciones/`, con las otras: es el resultado de medir un
     aparato concreto en una cancha concreta, no configuración del sistema.
+
+    Qué se guarda entero y qué no
+    -----------------------------
+    Las detecciones de **fantasmas** y del **marcador del rover** van completas:
+    ahí vive toda pregunta que se le haya hecho o se le pueda hacer a estos
+    datos. Las de los cuatro marcadores de **esquina** van resumidas por ID —n,
+    lado y cuadratura—, porque son decenas de miles de filas que repiten cuadro
+    tras cuadro casi lo mismo y se usan como **vara**, no como dato: de una vara
+    alcanza con su distribución. Medido sobre las dos sesiones que ya existían,
+    eso baja el archivo de **3,7 MB a 437 KB** sin perder una sola respuesta, en
+    una carpeta donde el resto de las mediciones pesa 3 o 4 KB.
     """
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     carpeta = os.path.join(base, cfg.precision.carpeta_mediciones)
     os.makedirs(carpeta, exist_ok=True)
     sello = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     ruta = os.path.join(carpeta, "falsos_positivos_{}.json".format(sello))
+
+    enteras = [d for d in crudos if d["grupo"] != "esquina"]
+    resumen = {}
+    for id_esquina in sorted({d["id"] for d in crudos if d["grupo"] == "esquina"}):
+        filas = [d for d in crudos if d["grupo"] == "esquina" and d["id"] == id_esquina]
+        resumen[str(id_esquina)] = {
+            "n": len(filas),
+            "lado_mm": _distribucion([d["lado_mm"] for d in filas]),
+            "cuadratura_pct": _distribucion([d["cuadratura_pct"] for d in filas]),
+        }
 
     datos = {
         "cuando": datetime.datetime.now().isoformat(timespec="seconds"),
@@ -427,13 +456,22 @@ def guardar_sesion(cfg, args, duracion, cuadros, sin_geometria, factores, crudos
             "rover_nominal": cfg.elementos.marcador_rover.lado_mm,
             "factor_paralaje_mediano": round(float(np.median(factores)), 4) if factores else None,
         },
-        "detecciones": crudos,
+        "detecciones": enteras,
+        "esquinas_resumen": resumen,
+        "_QUE_SE_GUARDA_Y_QUE_NO": (
+            "Las detecciones de FANTASMAS y del marcador del ROVER están completas. Las "
+            "de los cuatro marcadores de ESQUINA están resumidas por ID —n, lado y "
+            "cuadratura— porque se usan como VARA y no como dato: repiten casi lo mismo "
+            "cuadro tras cuadro, y de una vara alcanza con su distribución."),
     }
     with open(ruta, "w", encoding="utf-8") as f:
         json.dump(datos, f, indent=1, ensure_ascii=False)
     print("\n  Sesión cruda guardada en: {}".format(ruta))
-    print("  {} detecciones, con su cuadro, ID, grupo, celda, lado y cuadratura.".format(
-        len(crudos)))
+    print("  {} detecciones enteras (fantasmas y rover), con su cuadro, ID, grupo, celda, "
+          "lado y cuadratura.".format(len(enteras)))
+    if resumen:
+        print("  {} detecciones de marcadores de esquina, resumidas por ID: se usan como "
+              "vara, no como dato.".format(len(crudos) - len(enteras)))
 
 
 def informe(cfg, duracion, cuadros, sin_geometria, control, rovers, falsos,

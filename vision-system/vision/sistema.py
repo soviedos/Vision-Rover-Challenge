@@ -57,6 +57,7 @@ try:  # como paquete
     from .mundo import VERSION_PROTOCOLO, RelojRonda
     from .publish.puerto import ErrorPuerto
     from .publish.telemetria import PublicadorTelemetria
+    from .record.acta import escribir_acta, mmss
     from .reglas.acopio import ContadorAcopio
     from .tracking.admision import RegistroAdmision
     from .tracking.seguimiento import Seguidor
@@ -81,6 +82,7 @@ except ImportError:  # como script suelto
     )
     from vision.publish.puerto import ErrorPuerto  # type: ignore[no-redef]
     from vision.publish.telemetria import PublicadorTelemetria  # type: ignore[no-redef]
+    from vision.record.acta import escribir_acta, mmss  # type: ignore[no-redef]
     from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
     from vision.tracking.admision import RegistroAdmision  # type: ignore[no-redef]
     from vision.tracking.seguimiento import Seguidor  # type: ignore[no-redef]
@@ -562,6 +564,13 @@ def main(argv: list[str] | None = None) -> int:
     ultimo_estado = None
     acopio = None
     ultimo_error = ""
+    #: Para detectar los cambios de fase desde el bucle. Se mira acá y no en el
+    #: árbitro porque las transiciones llegan de tres lados —el reloj, el
+    #: teclado y la ventana— y el acta tiene que escribirse una sola vez,
+    #: cualquiera haya sido el que la disparó.
+    fase_previa = arbitro.fase
+    #: Los cubos que ya estaban en su zona al empezar a jugar. Va al acta.
+    arranque: tuple[str, ...] = ()
     proximo_informe = time.monotonic() + 5.0
     fin = time.monotonic() + args.duracion if args.duracion > 0 else float("inf")
 
@@ -620,6 +629,41 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:  # noqa: BLE001 — a propósito: nada tumba la ronda
                 fallos += 1
                 ultimo_error = "{}: {}".format(type(exc).__name__, exc)
+
+            # ---- el acta -------------------------------------------------
+            # Va acá, fuera del try del cuadro, para que se escriba aunque el
+            # cuadro que cerró la ronda haya fallado: la ronda terminó igual.
+            if arbitro.fase != fase_previa:
+                anterior, fase_previa = fase_previa, arbitro.fase
+                if fase_previa == "RUNNING":
+                    # Qué había en las zonas al empezar. Si ya había cubos
+                    # adentro, la ronda arranca con parte del reto hecho: no se
+                    # invalida acá, se registra y se avisa fuerte.
+                    arranque = tuple(
+                        z.color for z in acopio.zonas if z.adentro) if acopio else ()
+                    if arranque:
+                        print("[AVISO] la ronda arrancó con {} ya dentro de su zona. El "
+                              "cierre por reto cumplido exige pasar de incompleto a "
+                              "completo durante la ronda, así que no se va a disparar "
+                              "solo por esto, y el acta lo deja registrado.".format(
+                                  ", ".join(arranque)), flush=True)
+                elif fase_previa == "FINISHED" or (anterior == "READY"
+                                                   and fase_previa == "IDLE"):
+                    # Un consumidor que falla no puede tumbar nada: se avisa y
+                    # se sigue. Un disco lleno no arruina una competencia.
+                    try:
+                        ruta = escribir_acta(
+                            cfg,
+                            motivo=arbitro.motivo or "desconocido",
+                            tiempo_final_ms=arbitro.tiempo_final_ms,
+                            acopio=acopio, estado=ultimo_estado, arranque=arranque)
+                        print("[acta] ronda cerrada por {} · tiempo {} · acta en {}".format(
+                            arbitro.motivo, mmss(arbitro.tiempo_final_ms), ruta), flush=True)
+                    except Exception as exc:  # noqa: BLE001 — a propósito
+                        print("[acta] NO SE PUDO ESCRIBIR EL ACTA: {}: {}. La ronda "
+                              "terminó igual, pero no queda constancia.".format(
+                                  type(exc).__name__, exc), flush=True)
+                    arranque = ()
 
             # ---- la vista ------------------------------------------------
             if vista is not None and vista.toca_dibujar(time.monotonic()):

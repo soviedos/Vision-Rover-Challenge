@@ -31,11 +31,15 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
+import os
 import sys
+import tempfile
 
 try:  # como paquete
     from ..configuracion import Ronda, cargar_config
     from ..mundo import CuboEnMundo, EstadoMundo
+    from ..record.acta import escribir_acta
     from ..reglas.acopio import ContadorAcopio
     from ..sistema import (
         MOTIVO_ABORTADA, MOTIVO_OPERADOR, MOTIVO_RETO, MOTIVO_TIEMPO, Arbitro, _TRANSICIONES,
@@ -43,6 +47,7 @@ try:  # como paquete
 except ImportError:  # como script suelto
     from vision.configuracion import Ronda, cargar_config  # type: ignore[no-redef]
     from vision.mundo import CuboEnMundo, EstadoMundo  # type: ignore[no-redef]
+    from vision.record.acta import escribir_acta  # type: ignore[no-redef]
     from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
     from vision.sistema import (  # type: ignore[no-redef]
         MOTIVO_ABORTADA, MOTIVO_OPERADOR, MOTIVO_RETO, MOTIVO_TIEMPO, Arbitro, _TRANSICIONES,
@@ -409,6 +414,76 @@ def verificar_cierre_por_reto(cfg) -> bool:
     return todo_bien
 
 
+def verificar_acta(cfg) -> bool:
+    """El acta: que se escriba, que se lea, y que diga lo que pasó.
+
+    Se comprueba sobre un archivo de verdad, en una carpeta temporal, y no sobre
+    el diccionario antes de serializar: el modo de falla que importa es que el
+    acta **no se pueda escribir**, y eso solo aparece al escribirla. Un cubo
+    ausente tiene `falta_celdas` en infinito, que no es JSON válido; si ese caso
+    no estuviera contemplado, el acta reventaría justo en la ronda donde un cubo
+    se salió de la cancha, que es cuando más falta hace.
+    """
+    print("=" * 78)
+    print("ACTA: el registro de la ronda")
+    print("=" * 78)
+
+    centros = {d.color: (d.col, d.row) for d in cfg.lugares.depositos}
+    colores = sorted(centros)
+    carpeta = tempfile.mkdtemp(prefix="actas_prueba_")
+    contador = ContadorAcopio(cfg)
+    permanencia = cfg.conteo_acopio.permanencia_minima_ms
+
+    # Tres cubos adentro y sostenidos: una ronda cumplida.
+    cubos = tuple(CuboEnMundo(color=c, col=centros[c][0], row=centros[c][1]) for c in colores)
+    contador.actualizar(EstadoMundo(ts_ms=0, fase="RUNNING", cubos=cubos), 0, mono=0.0)
+    completo = contador.actualizar(
+        EstadoMundo(ts_ms=permanencia, fase="RUNNING", cubos=cubos), permanencia,
+        mono=permanencia / 1000.0)
+    estado = EstadoMundo(ts_ms=permanencia, fase="FINISHED", cubos=cubos)
+
+    ruta = escribir_acta(cfg, motivo=MOTIVO_RETO, tiempo_final_ms=200_000,
+                         acopio=completo, estado=estado, carpeta=carpeta)
+    with open(ruta, encoding="utf-8") as f:
+        acta = json.load(f)
+
+    # Y una ronda abortada, sin cubos en la cancha: el caso del infinito.
+    vacio = contador.actualizar(EstadoMundo(ts_ms=0, fase="READY"), 0, mono=0.0)
+    ruta2 = escribir_acta(cfg, motivo=MOTIVO_ABORTADA, tiempo_final_ms=None,
+                          acopio=vacio, estado=None, arranque=("green",), carpeta=carpeta)
+    with open(ruta2, encoding="utf-8") as f:
+        acta2 = json.load(f)
+
+    comprobaciones = [
+        ("el archivo existe", os.path.exists(ruta)),
+        ("el motivo quedó escrito", acta["motivo"] == MOTIVO_RETO),
+        ("el tiempo final, en ms y en m:ss", acta["tiempo_final_ms"] == 200_000
+         and acta["tiempo_final"] == "3:20"),
+        ("los tres cubos contados", acta["cubos_en_posicion"] == 3),
+        ("cada cubo con su color y veredicto",
+         sorted(c["color"] for c in acta["cubos"]) == colores
+         and all(c["contado"] for c in acta["cubos"])),
+        ("las posiciones finales", len(acta["posiciones_finales"]["cubos"]) == 3),
+        ("arranque regular", acta["arranque"]["irregular"] is False),
+        ("la ronda abortada también deja acta", os.path.exists(ruta2)),
+        ("sin cubos, falta_celdas es null y no infinito",
+         all(c["falta_celdas"] is None for c in acta2["cubos"])),
+        ("el arranque irregular queda marcado",
+         acta2["arranque"]["irregular"] is True
+         and acta2["arranque"]["cubos_ya_en_zona"] == ["green"]),
+        ("sin tiempo, el acta no inventa uno", acta2["tiempo_final"] == "—"),
+    ]
+
+    todo_bien = True
+    for nombre, ok in comprobaciones:
+        todo_bien = todo_bien and ok
+        print("  {:<56} {}".format(nombre, "OK" if ok else "FALLA"))
+
+    print("\n  acta de ejemplo: {}".format(os.path.basename(ruta)))
+    print("\n  resultado: {}\n".format("TODO OK" if todo_bien else "HAY FALLAS"))
+    return todo_bien
+
+
 def main(argv: list[str] | None = None) -> int:
     argparse.ArgumentParser(
         description="Verifica el árbitro de la ronda: transiciones y cronómetro."
@@ -424,6 +499,7 @@ def main(argv: list[str] | None = None) -> int:
         verificar_reloj(cfg),
         verificar_reto_cumplido(cfg),
         verificar_cierre_por_reto(cfg),
+        verificar_acta(cfg),
     ]
     print("=" * 78)
     print("RESULTADO GENERAL: {}".format("TODO OK" if all(resultados) else "HAY FALLAS"))

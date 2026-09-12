@@ -677,8 +677,10 @@ def autoprueba(cfg, con_perspectiva: bool) -> bool:
 
         # Se verifica el valor CORREGIDO, que es el que la herramienta recomienda
         # pegar en la configuración. El crudo viene inflado por el paralaje: el
-        # marcador está a 90 mm del tablero, así que el círculo que describe se
-        # ve más grande de lo que es. Comparar el crudo daría un error de 1,5 mm
+        # marcador está a 80 mm del tablero —lo que diga
+        # `paralaje.altura_marcador_rover_mm`, que es lo que lee la línea de
+        # abajo—, así que el círculo que describe se ve más grande de lo que es.
+        # Comparar el crudo daría un error de 1,5 mm
         # que no es del estimador sino del efecto que la corrección descuenta.
         k = factor_paralaje(cfg.sintetico.altura_camara_mm,
                             cfg.paralaje.altura_marcador_rover_mm)

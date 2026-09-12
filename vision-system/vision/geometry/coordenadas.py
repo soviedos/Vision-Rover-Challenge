@@ -269,7 +269,7 @@ def _desvio_del_esperado(
             # La memoria del seguidor guarda la posición YA corregida, y los
             # candidatos se miden sin corregir: hay que elevar la esperada a
             # donde SE VE, no bajar el candidato. Sin esto, el propio marcador
-            # legítimo arrastra un desvío de 0,6 —26 mm de paralaje sobre 41,8
+            # legítimo arrastra un desvío de 0,6 —26 mm de paralaje sobre 41,6
             # de lado— que no dice nada de su plausibilidad.
             elevada = pose.elevar(np.array([celda_esperada], dtype=np.float64), altura)[0]
             celda_esperada = (float(elevada[0]), float(elevada[1]))

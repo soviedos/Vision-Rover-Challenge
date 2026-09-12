@@ -212,7 +212,7 @@ documento.** De ahí que no se escriba acta de una ronda sin geometría.
 ### Percepción
 - **Detección de color:** segmentar por **saturación** (el tablero es acromático)
   y clasificar en espacio **Lab** (no HSV).
-- **Paralaje:** los objetos altos (cubo 6 cm, marcador del rover ~10 cm) se ven
+- **Paralaje:** los objetos altos (cubo 6 cm, marcador del rover 8 cm) se ven
   corridos **hacia afuera**. **Corregirlo es obligatorio**, usando la **pose de cámara**
   deducida de los cuatro marcadores más la **altura conocida** del objeto.
 - **Oclusión:** un objeto tapado **mantiene su última posición** con su **edad creciendo**.

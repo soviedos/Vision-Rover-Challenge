@@ -4,7 +4,8 @@ Este repositorio es un **fork** del reto **Vision-Rover-Challenge** de CENFOTEC.
 Este documento fija las reglas que rigen TODO el desarrollo del **sistema de visión**
 para que sea consistente. Cualquier trabajo debe respetar lo aquí escrito.
 
-> Rama de trabajo: **`desarrollo`**. Nunca se commitea a `main`.
+> Rama de trabajo: **`desarrollo`**. A `main` no se commitea **directo**: recibe
+> el trabajo terminado avanzando desde `desarrollo`.
 
 ---
 
@@ -327,7 +328,16 @@ documento.** De ahí que no se escriba acta de una ronda sin geometría.
 
 ## 9. Git
 
-- Rama de trabajo: **`desarrollo`**. **No commitear a `main`.**
+- Rama de trabajo: **`desarrollo`**. **Nunca se commitea directo a `main`**: todo
+  nace, se verifica y se commitea acá.
+- **`main` recibe el trabajo terminado**, avanzando desde `desarrollo`
+  (`git merge --ff-only desarrollo`). No lleva commits propios, así que el avance
+  siempre es limpio y sin merge.
+- **Sincronizar con CENFOTEC va a `desarrollo`, no a `main`.** Desde que `main`
+  lleva nuestro trabajo dejó de ser espejo de `upstream`: lo nuevo de CENFOTEC se
+  trae con `git merge upstream/main` **estando en `desarrollo`**, y de ahí llega a
+  `main` por el mismo avance de siempre. Traerlo directo a `main` lo haría
+  divergir de `desarrollo` y rompería el avance limpio.
 - Commits **chicos y descriptivos, en español**.
 - Remotos: `origin` = fork propio (`soviedos/Vision-Rover-Challenge`);
   `upstream` = repo original de CENFOTEC.

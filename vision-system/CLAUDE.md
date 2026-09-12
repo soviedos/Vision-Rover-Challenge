@@ -96,8 +96,21 @@ Vision-Rover-Challenge/          # raíz del repositorio (fork)
 - Cada mensaje lleva **número de secuencia** y **marca de tiempo de captura**.
 
 ### Árbitro y fases
-- La **visión es árbitro**: expone un campo de **fase**:
-  `IDLE` / `READY` / `RUNNING` / `FINISHED`.
+- La **visión es árbitro de verdad**: expone un campo de **fase**
+  (`IDLE` / `READY` / `RUNNING` / `FINISHED`), lleva el **cronómetro oficial** y
+  **cierra la ronda sola**.
+- **`READY → RUNNING` es automática** y **no se puede adelantar con el teclado**:
+  ahí vive la igualdad de tiempo de preparación entre equipos. El comando
+  `start` no existe.
+- **`RUNNING → FINISHED` es automática** por tiempo agotado o por reto cumplido.
+  El tiempo del reto se toma en la **entrada del último cubo**, no cuando se
+  cumple la permanencia mínima del contador.
+- El cronómetro se mide con **reloj monótono**; el `ts_ms` del mensaje sigue
+  siendo de pared. Dos relojes, dos trabajos.
+- Los dos tiempos de la ronda van en **configuración**, no en el código.
+- Cada ronda cerrada deja un **acta** en `actas/` (no se versiona).
+- **Los documentos del sistema NO dicen qué debe hacer el robot en cada fase.**
+  Eso es regla de competencia y vive en el reglamento.
 
 ### Sistema de coordenadas
 - Anclado a **cuatro marcadores ArUco de esquina** (`DICT_4X4_50`).

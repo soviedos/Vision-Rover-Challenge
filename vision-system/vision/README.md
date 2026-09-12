@@ -86,7 +86,7 @@ su propio README con el detalle:
 | `detectors/` | Productor | Qué hay y dónde | 🟢 **rovers** por marcador y **cubos** por color |
 | `tracking/` | Productor | Identidad, oclusión y edad | 🟢 **memoria entre cuadros** |
 | `publish/` | Consumidor | Publicación TCP/NDJSON | 🟢 **reloj propio y último-valor-gana** (el transporte lo comparte con el contrato) |
-| `record/` | Consumidor | Grabación a disco | ⚪ vacío |
+| `record/` | Consumidor | Acta de la ronda y grabación a disco | 🟢 **acta funcionando** |
 | `tools/` | Herramientas | Puesta a punto y verificación | 🟢 **nueve herramientas** · ⚪ guía de alineamiento |
 
 🟢 hay código funcionando · ⚪ planificado, sin código aún

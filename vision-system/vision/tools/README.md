@@ -194,6 +194,25 @@ rectángulo, no solo que el número detectado sea coherente.
 | Por defecto son **3 mm** | tres veces ese error |
 | "Justo afuera" empuja **hacia adentro de la cancha** | es el error que ocurre de verdad en una ronda: el rover no terminó de empujar el cubo hasta el fondo de la zona |
 
+### `verificar_ronda.py`
+
+Verifica el **árbitro**: el mapa de transiciones y el cronómetro oficial.
+
+```bash
+python -m vision.tools.verificar_ronda
+```
+
+Cinco bloques: las transiciones que se pueden y las que **no** —que `start` no
+exista y que arrancar en `RUNNING` lance son parte de lo verificado—, los tres
+valores del cronómetro, el cierre por reto cumplido, la cadena completa
+contador + árbitro, y el acta.
+
+El reloj **se inyecta**, y por eso la herramienta existe: verificar el cierre por
+tiempo agotado durmiendo diez minutos haría que nadie la corriera nunca, y una
+verificación que no se corre no verifica nada. Así se prueba el instante exacto
+del límite, un milisegundo antes, y **pasado**, que es el caso que siempre ocurre
+de verdad.
+
 ### `verificar_config.py`
 
 Revisa `config_vision.json` **antes** de que importe, y muestra lo que el

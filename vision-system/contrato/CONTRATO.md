@@ -137,6 +137,7 @@ línea**):
   "seq": 4137,
   "ts_ms": 1785012345678,
   "phase": "RUNNING",
+  "clock": { "elapsed_ms": 88000, "remaining_ms": 512000, "total_ms": 600000 },
   "grid": { "cols": 43, "rows": 43, "cell_mm": 20.0 },
   "rovers": [
     { "id": 10, "col": 18.402, "row": 6.705,  "theta": 84.20, "age_ms": 0 },
@@ -181,6 +182,7 @@ línea**):
 | `seq` | entero | Número de secuencia, sube de a uno por mensaje publicado. Sirve para detectar pérdidas. |
 | `ts_ms` | entero | Instante de **captura del cuadro**, en milisegundos desde época (Unix). **No** es el instante de envío. |
 | `phase` | texto | `IDLE`, `READY`, `RUNNING` o `FINISHED`. Ver sección 5. |
+| `clock` | objeto | El cronómetro oficial de la ronda, **del mismo instante que `ts_ms`**. Ver sección 5. |
 | `grid` | objeto | Dimensiones de la cancha. |
 | `rovers` | lista | Robots detectados. **Dinámico.** |
 | `cubes` | lista | Cubos detectados. **Dinámico.** |
@@ -189,6 +191,26 @@ línea**):
 | `depots` | lista | Zonas de acopio: el **centro** de cada una. **Estático.** |
 | `depot_size` | objeto | Tamaño de las zonas, en celdas. **Uno solo para las tres.** **Estático.** |
 | `cube_side` | número | Lado del cubo, en celdas. **Estático.** |
+
+### `clock`
+
+| Campo | Tipo | Significado |
+|---|---|---|
+| `elapsed_ms` | entero | Cuánto lleva la fase que se está contando. |
+| `remaining_ms` | entero | Cuánto le queda. |
+| `total_ms` | entero | Cuánto dura. **En cero, no se está contando nada** (`IDLE`). |
+
+Vale siempre `elapsed_ms + remaining_ms == total_ms`, y los tres son del **mismo
+instante** que el `ts_ms` de ese mensaje. Con eso alcanza para saber en qué punto
+de la ronda está la cancha **con un solo mensaje y sin memoria**: no hace falta
+haber visto los anteriores ni llevar un reloj propio.
+
+**No lleven su propio cronómetro.** Un reloj que arranca en el robot se desvía
+del oficial, y uno que se conecta tarde no sabe en qué momento entró. El único
+tiempo que vale es el que viene acá.
+
+En `FINISHED`, `elapsed_ms` es **el tiempo que tomó la ronda**. Si terminó antes
+de agotarse, `remaining_ms` dice cuánto sobró.
 
 ### `grid`
 
@@ -491,21 +513,47 @@ necesitan acotarlo, acótenlo ustedes.
 
 ## 5. Fases
 
-**La visión es árbitro.** Ella dice en qué fase está la ronda, y los rovers
-obedecen.
+**La visión es árbitro.** Lleva el cronómetro oficial de la ronda y decide
+cuándo empieza y cuándo termina.
 
-| Fase | Qué significa | Qué hace su rover |
+| Fase | Qué significa para la visión | Qué cuenta el reloj |
 |---|---|---|
-| `IDLE` | Sistema encendido, ronda no preparada. | Quieto. |
-| `READY` | Cancha lista, robots en la salida. Está por empezar. | Quieto. Pueden leer telemetría y planificar. |
-| `RUNNING` | **Ronda en juego.** | Se mueve. |
-| `FINISHED` | Ronda terminada. | **Frenar de inmediato.** |
+| `IDLE` | Sistema encendido, ronda no preparada. | nada (`total_ms: 0`) |
+| `READY` | Preparación en curso. | cuánto falta para que empiece la ronda |
+| `RUNNING` | Ronda en juego. | cuánto queda de ronda |
+| `FINISHED` | Ronda terminada. | se detiene con el tiempo que tomó |
 
-Transiciones normales: `IDLE → READY → RUNNING → FINISHED`, y `FINISHED → READY`
-para la ronda siguiente.
+### Quién dispara cada transición
 
-La visión **sigue publicando en todas las fases**, incluso en `IDLE`. Que llegue
+```
+IDLE ──ready──▶ READY ───el reloj───▶ RUNNING ───el reloj───▶ FINISHED
+                  │                       │
+                  └──abort──▶ IDLE        └──stop──▶ FINISHED
+FINISHED ──ready──▶ READY        FINISHED ──abort──▶ IDLE
+```
+
+- **`READY → RUNNING` la hace el reloj, sola, y no hay forma de adelantarla.**
+  Es lo que hace que todos los equipos preparen con el mismo tiempo. No existe
+  ningún comando que salte la preparación.
+- **`RUNNING → FINISHED` también puede hacerla el reloj**, de dos maneras: se
+  agota el tiempo, o **los tres cubos quedan en posición**. En el segundo caso el
+  cronómetro se detiene con el tiempo que tomó el reto.
+- Las demás las hace una persona operando el sistema.
+
+### Cuándo se toma el tiempo del reto
+
+Cuando el último cubo **entra** en su zona, no cuando el sistema termina de
+confirmarlo. La visión exige que un cubo se sostenga dentro durante un rato antes
+de darlo por entregado —si no, la cuenta titilaría con el cubo parado justo en el
+borde— pero ese rato **no se les cobra**: el reloj se detiene en el instante de
+la entrada.
+
+### La telemetría no se corta nunca
+
+La visión **publica en todas las fases**, incluso en `IDLE`. Que llegue
 telemetría no significa que la ronda esté corriendo: hay que mirar `phase`.
+Conviene conectarse mucho antes de que empiece la ronda; descubrir un problema de
+conexión cuando el reloj ya corre es caro.
 
 ---
 
@@ -705,7 +753,8 @@ python3 mock_publisher.py
 Simulador del Vision-Rover-Challenge — protocolo v2
 Publicando NDJSON en 0.0.0.0:2026 a 20 Hz
 Cancha: 43x43 celdas de 20 mm
-Comandos: ready | start | stop | quit
+Preparación: 60 s   ·   Ronda: 600 s   (de READY a RUNNING pasa solo)
+Comandos: ready | stop | abort | quit
 ==================================================================
 ```
 
@@ -803,31 +852,46 @@ Los comandos se escriben **en la terminal 1, la del simulador**, uno por vez, y
 se aprieta **Enter**. El simulador hace de **árbitro**: él decide en qué fase
 está la ronda.
 
-| Escribís | Deja la fase en | Qué significa | Qué hacen los robots |
-|---|---|---|---|
-| `ready` | `READY` | Cancha lista, robots en la salida | Quietos |
-| `start` | `RUNNING` | **¡Arrancó la ronda!** | Se mueven |
-| `stop` | `FINISHED` | Se terminó | Frenan de inmediato |
-| `quit` | — | Apaga el simulador | — |
+| Escribís | Deja la fase en | Qué significa |
+|---|---|---|
+| `ready` | `READY` | Empieza la preparación, y el reloj con ella |
+| `stop` | `FINISHED` | Cierra la ronda antes de tiempo |
+| `abort` | `IDLE` | Cancela la preparación y vuelve al principio |
+| `quit` | — | Apaga el simulador |
 
-El orden natural es **`ready` → `start` → `stop`**. Para otra ronda, `ready` de
-nuevo.
+**No hay comando para arrancar la ronda**: de `READY` a `RUNNING` pasa el reloj
+solo, al agotarse la preparación. El orden natural es escribir **`ready`** y
+esperar.
+
+> **El mundo simulado solo se mueve en `RUNNING`.** Si se conectan y ven todo
+> quieto, no está roto: la ronda no empezó. Miren `phase` y `clock`.
+>
+> Para probar el ciclo completo sin esperar once minutos, bajen
+> `ronda.preparacion_ms` y `ronda.duracion_ms` en `config_simulador.json`. Para
+> eso están declarados.
 
 Cada vez que escribís uno, el simulador te confirma en pantalla:
 
 ```
 [fase] fase: IDLE -> READY
-[fase] fase: READY -> RUNNING
-[fase] fase: RUNNING -> FINISHED
+[fase] fase: READY -> RUNNING (se agotó la preparación)
+[fase] fase: RUNNING -> FINISHED (se agotó el tiempo)
 ```
 
-Ese `fase: X -> Y` es la prueba de que te escuchó.
+Ese `fase: X -> Y` es la prueba de que te escuchó. Fijate que las **dos últimas
+las hizo el reloj solo**: vos solo escribiste `ready`.
 
-> **Equivocarte de orden no rompe nada.** Si escribís `start` sin haber hecho
-> `ready`, te responde:
+> **No hay comando para arrancar la ronda.** Si escribís `start`, te responde:
 >
 > ```
-> [fase] 'start' no es válido desde IDLE (se puede desde ['READY'])
+> [fase] 'start' ya no existe: de READY a RUNNING pasa el reloj, no una tecla.
+>        Para probar sin esperar, bajá ronda.preparacion_ms.
+> ```
+>
+> Y equivocarte de orden tampoco rompe nada. Un `stop` sin ronda en juego:
+>
+> ```
+> [fase] 'stop' no es válido desde IDLE (se puede desde ['RUNNING'])
 > ```
 >
 > y sigue funcionando normal. Probá tranquilo.
@@ -921,8 +985,13 @@ vivo. El cliente va en **otra** ventana.
 
 #### El cliente conecta pero los rovers no se mueven
 
-Están quietos porque la ronda no arrancó. Andá a la terminal 1 y escribí
-`ready`, Enter, después `start`, Enter.
+Están quietos porque la ronda no arrancó: **el mundo simulado solo se mueve en
+`RUNNING`**. Andá a la terminal 1, escribí `ready`, Enter, y **esperá**: la
+preparación dura un minuto y después la ronda arranca sola. Mientras tanto,
+`clock.remaining_ms` te dice cuánto falta.
+
+Si no querés esperar cada vez que probás, bajá `ronda.preparacion_ms` en
+`config_simulador.json`. Para eso está declarado.
 
 ---
 
@@ -958,7 +1027,7 @@ while True:
 
         if mensaje["v"] != 2:                   # versión desconocida: descartar
             continue
-        if mensaje["phase"] != "RUNNING":       # fuera de la ronda no se juega
+        if mensaje["phase"] != "RUNNING":       # la ronda no está en juego
             continue
 
         # Mi rover se BUSCA por id. Nunca se indexa por posición: el orden de
@@ -990,8 +1059,9 @@ while True:
 ```
 
 **Probalo ahora mismo:** guardá eso como `mi_cliente.py`, dejá el simulador
-corriendo (Paso 3), corrélo con `python3 mi_cliente.py` y escribí `start` en la
-terminal del simulador. Vas a ver:
+corriendo (Paso 3), corrélo con `python3 mi_cliente.py` y escribí `ready` en la
+terminal del simulador. Cuando se agote la preparación, la ronda arranca sola y
+vas a ver:
 
 ```
 fase=RUNNING  mi rover: col=11.92 row=17.93 theta=359.2
@@ -1011,9 +1081,10 @@ fase=RUNNING  mi rover: col=11.92 row=17.93 theta=359.2
 | **Cruza cubos y depots por `color`** | el color es la identidad del cubo |
 | Ignora cubos con `age_ms` alto | están tapados: el dato es viejo (sección 6.2) |
 
-> **Si no imprime nada**, es porque la ronda no arrancó: escribí `start` en la
-> terminal del simulador. Y si te sale `ConnectionRefusedError`, el simulador no
-> está corriendo — mirá "Problemas frecuentes" acá arriba.
+> **Si no imprime nada**, es porque la ronda no arrancó: escribí `ready` en la
+> terminal del simulador y esperá a que se agote la preparación. Y si te sale
+> `ConnectionRefusedError`, el simulador no está corriendo — mirá "Problemas
+> frecuentes" acá arriba.
 
 > **En el robot es exactamente lo mismo.** El rover corre **CircuitPython** sobre
 > ESP32, que también trae `json` y sockets: la telemetría se parsea igual, con
@@ -1076,7 +1147,8 @@ lado y compará.
 python3 mock_publisher.py
 ```
 
-Después escribí `ready`, Enter. Luego `start`, Enter.
+Después escribí `ready`, Enter. La ronda arranca sola cuando se agota la
+preparación.
 
 **Terminal 2** — también parado dentro de `contrato`:
 
@@ -1128,6 +1200,20 @@ Este formato **es un contrato**. No cambia sin:
 2. **avisarles** con tiempo.
 
 ### Migración de la v1 a la v2
+
+### El campo `clock`, agregado dentro de la v2
+
+La v2 **sumó `clock` sin subir la versión**, y conviene que quede escrito por qué,
+para que no se lea como que el contrato se puede estirar a gusto.
+
+La regla —no se cambia el contrato sin subir `v` y avisar— existe para proteger a
+quien ya escribió código contra el formato. En el momento de agregarlo **ningún
+equipo tenía todavía un cliente de telemetría**, así que no había nada que
+romper: no había código que proteger. Subir a `v: 3` habría obligado a todos a
+escribir un número distinto sin que nadie ganara nada.
+
+**Esto no vuelve a pasar.** Con clientes en la calle, un campo nuevo es un cambio
+de contrato como cualquier otro y va con cambio de versión y aviso.
 
 **Qué NO se rompe.** Nada de la forma del mensaje que ya consumían: `grid`,
 `rovers`, `cubes`, `obstacles`, `phase`, `seq`, `ts_ms`, `start` y `depots`

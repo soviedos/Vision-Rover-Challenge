@@ -504,9 +504,6 @@ obedecen.
 Transiciones normales: `IDLE → READY → RUNNING → FINISHED`, y `FINISHED → READY`
 para la ronda siguiente.
 
-**En `RUNNING` se juega, en todo lo demás se está quieto.** Un rover que se
-mueve fuera de `RUNNING` está infringiendo.
-
 La visión **sigue publicando en todas las fases**, incluso en `IDLE`. Que llegue
 telemetría no significa que la ronda esté corriendo: hay que mirar `phase`.
 
@@ -1008,8 +1005,8 @@ fase=RUNNING  mi rover: col=11.92 row=17.93 theta=359.2
 | Qué hace | Por qué |
 |---|---|
 | Acumula en `buffer` y corta por `\n` | TCP no respeta los límites de los mensajes (sección 1) |
-| Descarta si `v` no es 1 | formato desconocido: no adivinar |
-| No hace nada fuera de `RUNNING` | moverse fuera de la ronda es infracción (sección 5) |
+| Descarta si `v` no es 2 | formato desconocido: no adivinar |
+| No hace nada fuera de `RUNNING` | el campo `phase` dice si la ronda está en juego (sección 5) |
 | **Busca el rover por `id`**, no por posición | el orden de las listas no está garantizado (sección 6.1) |
 | **Cruza cubos y depots por `color`** | el color es la identidad del cubo |
 | Ignora cubos con `age_ms` alto | están tapados: el dato es viejo (sección 6.2) |

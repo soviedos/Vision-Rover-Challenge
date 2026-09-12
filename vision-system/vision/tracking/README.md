@@ -5,8 +5,9 @@ por cuadro, y arma el **estado del mundo** que consumen `publish/` y `record/`.
 
 ## Estado: funcionando y verificado
 
-**Todavía no hay código acá.** Depende de [`../detectors/`](../detectors/README.md),
-que tampoco existe aún.
+Dos piezas: [`seguimiento.py`](seguimiento.py), que le da continuidad e identidad
+a lo que los detectores ven cuadro por cuadro, y [`admision.py`](admision.py),
+que decide cuándo una identidad de rover **nueva** entra al estado del mundo.
 
 ## Lo que existe
 

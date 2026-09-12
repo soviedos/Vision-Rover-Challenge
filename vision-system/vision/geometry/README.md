@@ -31,9 +31,12 @@ un trapecio y no como un rectángulo: una escala daría bien en el centro y mal 
 los bordes. La homografía es la transformación exacta entre dos planos vistos en
 perspectiva, y el tablero es un plano. Cuatro puntos la determinan por completo.
 
-**Por qué los centros de los marcadores y no sus esquinas.** El centro es el
-promedio de las cuatro esquinas detectadas, así que reparte el ruido en vez de
-arrastrar el de una sola. Y es lo único medible sin ambigüedad en la cancha
+**Por qué los centros de los marcadores y no sus esquinas.** El centro sale de
+**cruzar las dos diagonales**, no de promediar las cuatro esquinas: bajo
+perspectiva el promedio está sesgado, porque el cuadrado se ve como un
+cuadrilátero y su centro proyectado no es el promedio de los vértices. Así
+reparte el ruido de las cuatro en vez de arrastrar el de una sola, sin meter el
+sesgo. Y es lo único medible sin ambigüedad en la cancha
 física: "el centro del marcador" no admite discusión, "su esquina superior
 izquierda" sí.
 
@@ -249,6 +252,27 @@ Dos propiedades que conviene saber:
 Los **cubos no la necesitan**: se ubican por su borde inferior, que está en el
 piso, y ahí el factor vale exactamente 1.
 
-## Lo que todavía NO existe
+## Las defensas contra marcadores inventados
 
-Planificado, sin código aún:
+El detector de ArUco inventa marcadores sobre la cuadrícula del tablero. Este
+paquete los ataja en cadena, y el **orden importa**: cada eslabón le saca trabajo
+al siguiente.
+
+| Paso | Qué hace | Dónde |
+|---|---|---|
+| **Refinamiento subpíxel** | afina las esquinas antes de medir nada; configurable | `parametros_detector()` |
+| **Filtro de tamaño** | rechaza lo que no mide lo que ese ID debería medir, derivado de `lado_mm × factor(pose)` | `filtrar_plausibles()` |
+| **Filtro de posición** | rechaza lo que cae fuera de la cancha, con margen de 2 celdas | `filtrar_plausibles()` |
+| **Duplicados** | dos marcadores con el mismo ID se resuelven por plausibilidad; si empatan, se descarta el cuadro | `resolver_duplicados()` |
+
+Los rechazos **se cuentan y se informan** (`Rechazo`, `Duplicado`): un filtro
+mudo que empieza a rechazar marcadores de verdad es indistinguible de una cámara
+que dejó de verlos.
+
+Un detalle que importa en el arranque: `filtrar_plausibles` **se desactiva sola
+en el primer cuadro**, cuando todavía no hay geometría. Sin coordenadas no se
+puede saber cuánto mide nada, y es preferible dejar pasar un fantasma que
+rechazar al marcador que está por establecer el sistema de coordenadas.
+
+La quinta defensa —la **admisión por persistencia**— no vive acá sino en
+[`../tracking/`](../tracking/README.md), porque necesita memoria entre cuadros.

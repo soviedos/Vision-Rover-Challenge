@@ -129,7 +129,8 @@ documento.** De ahí que no se escriba acta de una ronda sin geometría.
   cumple la permanencia mínima del contador.
 - El cronómetro se mide con **reloj monótono**; el `ts_ms` del mensaje sigue
   siendo de pared. Dos relojes, dos trabajos.
-- Los dos tiempos de la ronda van en **configuración**, no en el código.
+- Los tres tiempos de la ronda —preparación, duración y cuánta ceguera se
+  tolera— van en **configuración**, no en el código.
 - Cada ronda cerrada deja un **acta** en `actas/` (no se versiona).
 - **Los documentos del sistema NO dicen qué debe hacer el robot en cada fase.**
   Eso es regla de competencia y vive en el reglamento.

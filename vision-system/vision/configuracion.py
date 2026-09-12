@@ -332,7 +332,7 @@ class ConteoAcopio:
 
 @dataclass(frozen=True, slots=True)
 class Ronda:
-    """Los dos tiempos de una ronda, en milisegundos.
+    """Los tres tiempos de una ronda, en milisegundos.
 
     Van **declarados** y no incrustados en el código porque son reglas de
     competencia: el día que la organización decida que la preparación dura

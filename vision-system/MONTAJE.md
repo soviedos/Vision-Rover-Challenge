@@ -95,8 +95,9 @@ al ras del borde del tablero, tapado por una cinta, o pegado justo contra una
 zona oscura, el detector no ve ese contraste y **el marcador sencillamente no
 existe** para el sistema.
 
-**Cuánto margen:** la regla es **un 20 % del lado del marcador** por cada
-costado. Las medidas concretas de esta cancha:
+**Cuánto margen:** para los marcadores de esquina, **un 20 % del lado**. El del
+rover lleva 5 mm sobre 40, que es un 12,5 %: ahí manda el espacio disponible en
+el robot, y esa medida está verificada en cancha. Las medidas concretas:
 
 | Marcador | Lado (negro) | Blanco por costado | Total impreso |
 |---|---|---|---|
@@ -106,9 +107,11 @@ costado. Las medidas concretas de esta cancha:
 Esto aplica a **todos** los marcadores: los cuatro de esquina y los de los
 rovers.
 
-> **El marcador del rover todavía es provisional.** Los 40 mm salen del espacio
-> disponible en el robot (50 × 70 mm) y **falta comprobar** que se detecte de
-> forma estable desde la cámara montada a 2,1 m. Si no alcanza, hay lugar para
+> **El marcador del rover está confirmado.** Los 40 mm salen del espacio
+> disponible en el robot (50 × 70 mm), se verificaron con calibre el 11-sep-2026
+> y la duda que quedaba —si a esa medida se detecta de forma **estable** desde la
+> cámara a 2,1 m— se midió en la cancha: **3095 de 3095 cuadros útiles, en una
+> sola racha, sin un parpadeo**. Si alguna vez no alcanzara, hay lugar para
 > 60 mm usando el lado largo. Las dos medidas viven en
 > [`vision/config_vision.json`](vision/config_vision.json), cada una con su
 > estado; ahí manda la configuración y no este documento.

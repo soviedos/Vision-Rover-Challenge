@@ -44,7 +44,7 @@ Porque el margen del filtro de tamaño es una propiedad de **esta** escena, esta
 luz y esta altura de cámara, no del sistema. Medido, el fantasma más grande está
 a factor 1,9 del umbral, no a factor 10: alcanza con que cambie la iluminación o
 se baje la cámara para que ese margen se achique. La persistencia no depende de
-ningún margen —depende de que un fantasma no se sostenga— y cuesta 100 ms una
+ningún margen —depende de que un fantasma no se sostenga— y cuesta 166 ms una
 vez. Es una red, no la defensa principal.
 
 Solo se aplica a los rovers

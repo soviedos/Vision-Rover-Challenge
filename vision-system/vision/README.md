@@ -68,7 +68,7 @@ sistema sino el resultado de medir aparatos concretos:
 | `calibraciones/` | Un **perfil por cámara** con su distorsión de lente. Ver [`geometry/`](geometry/README.md). |
 | `mediciones/` | Una sesión por cada prueba de **precisión de ubicación**. Ver [`tools/`](tools/README.md). |
 
-Dos módulos sueltos que no son de ningún lado, y siete subpaquetes:
+Tres módulos sueltos que no son de ningún lado, y ocho subpaquetes:
 
 | Módulo | Qué es |
 |---|---|
@@ -82,12 +82,13 @@ su propio README con el detalle:
 | Paquete | Lado | Rol | Estado |
 |---|---|---|---|
 | `sources/` | Productor | De dónde salen las imágenes | 🟢 **cámara USB real** y **generador sintético con cámara estenopeica**, intercambiables |
-| `geometry/` | Productor | Píxeles → celdas | 🟢 **coordenadas ArUco**, **corrección de distorsión**, **pose de cámara**, **paralaje** y **degradación con 3 marcadores** |
+| `geometry/` | Productor | Píxeles → celdas | 🟢 **coordenadas ArUco**, **corrección de distorsión**, **pose de cámara**, **paralaje**, **degradación con 3 marcadores**, **refinamiento subpíxel** y los **filtros de plausibilidad** (tamaño, posición, duplicados) |
 | `detectors/` | Productor | Qué hay y dónde | 🟢 **rovers** por marcador y **cubos** por color |
-| `tracking/` | Productor | Identidad, oclusión y edad | 🟢 **memoria entre cuadros** |
+| `tracking/` | Productor | Identidad, oclusión y edad | 🟢 **memoria entre cuadros** y **admisión de identidades nuevas** |
+| `reglas/` | — | Lo que el sistema decide | 🟢 **conteo de cubos en posición**, con permanencia mínima |
 | `publish/` | Consumidor | Publicación TCP/NDJSON | 🟢 **reloj propio y último-valor-gana** (el transporte lo comparte con el contrato) |
 | `record/` | Consumidor | Acta de la ronda y grabación a disco | 🟢 **acta funcionando** |
-| `tools/` | Herramientas | Puesta a punto y verificación | 🟢 **nueve herramientas** · ⚪ guía de alineamiento |
+| `tools/` | Herramientas | Puesta a punto y verificación | 🟢 **trece herramientas** · ⚪ guía de alineamiento |
 
 🟢 hay código funcionando · ⚪ planificado, sin código aún
 

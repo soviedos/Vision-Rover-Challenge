@@ -58,9 +58,8 @@ abortar la preparación (`abort`); arrancarla no.
 ### Lo que este proyecto NO hace
 
 **No maneja los rovers.** La planificación de rutas, la asignación de tareas, la
-coordinación entre los dos robots, el control de motores y la lógica de juego son
-responsabilidad de **cada equipo y deben ejecutarse en los rovers durante una
-ronda oficial**. Nosotros solo informamos; los rovers deciden.
+coordinación entre los dos robots, el control de motores y la lógica de juego
+están **fuera de este sistema**: son de cada equipo. Nosotros solo informamos.
 
 La computadora que ejecuta este sistema de visión pertenece a la infraestructura
 oficial de la competencia. No es una computadora de control del equipo y no
@@ -95,10 +94,12 @@ confiar tanto en la estabilidad del formato como en la separación entre
 La comunicación del contrato de visión es **unidireccional**: el sistema oficial
 publica el estado del mundo y los rovers lo leen.
 
-Durante desarrollo y pruebas, un equipo puede consumir la telemetría desde una
-computadora para depurar, simular o validar su software. Durante una ronda
-oficial, esa computadora externa no puede convertirse en el planificador,
-coordinador o controlador de los rovers.
+Cualquiera puede consumir la telemetría desde una computadora para depurar,
+simular o validar software: el sistema publica lo mismo para todos y no sabe
+quién lo está leyendo.
+
+Qué arquitectura de control se admite durante una ronda oficial **no lo define
+este sistema**: está en el reglamento.
 
 
 ---
@@ -205,7 +206,8 @@ El diagrama muestra el recorrido completo, y **está construido entero**:
 | ④ detectores — **rovers** | ✅ | 1,03 mm · 1,2° |
 | ④ detectores — **cubos** | ✅ | 1,05 mm (4,88 mm empujado) |
 | ⑤ seguimiento · ⑥ estado del mundo · ⑦ publicación | ✅ | — |
-| ⑦ grabación a disco | ⚪ todavía no existe | — |
+| ⑦ acta de la ronda | ✅ | — |
+| ⑧ grabación de sesiones a disco | ⚪ todavía no existe | — |
 
 Todos los errores son **contra la verdad conocida** del generador sintético, con
 la cámara inclinada, y contra un criterio de aceptación de **10 mm**.
@@ -364,7 +366,8 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
         ├── publish/                 # consumidor: a la red
         │   └── telemetria.py        #   reloj propio, último estado bueno
         │
-        ├── record/                  # consumidor: a disco               (vacío)
+        ├── record/                  # consumidor: a disco
+        │   └── acta.py              #   el registro de cada ronda cerrada
         │
         ├── tools/                   # herramientas de puesta a punto
         │   ├── diagnostico_camara.py    # ¿la cámara sirve?
@@ -655,8 +658,9 @@ empujados.
 
 Un equipo puede escribir y probar gran parte de su lógica **antes de ver una
 cancha**, utilizando una computadora como entorno de desarrollo y el simulador
-como fuente de telemetría. Antes de competir, esa lógica debe quedar preparada
-para ejecutarse en los rovers según las reglas de autonomía.
+como fuente de telemetría. El simulador publica en el **mismo puerto y con el
+mismo formato** que el sistema real, así que pasar de uno al otro no exige tocar
+una línea.
 
 El manual completo para los equipos está en
 **[`contrato/CONTRATO.md`](contrato/CONTRATO.md)**.
@@ -747,9 +751,7 @@ Es el cliente de referencia para **desarrollo, pruebas y validación**: se conec
 al puerto 2026 y verifica cada mensaje contra el contrato.
 
 Sirve para comprobar desde una computadora que la red y la telemetría funcionan.
-No representa la arquitectura de control permitida durante una ronda oficial; en
-competencia, el rover debe implementar el consumo del contrato y ejecutar
-localmente su estrategia.
+Es una herramienta de diagnóstico, no un ejemplo de arquitectura de control.
 
 ### Probar el simulador del contrato (sin instalar nada)
 
@@ -874,7 +876,9 @@ ubica bien, así que la cámara se puede elegir por disponibilidad y precio.
 
 El **sistema de visión** está completo y verificado: capta, deduce y publica.
 Fuera de ese alcance quedan dos cosas que no son percepción —el **instalador
-para Windows** y la **grabación de sesiones** (`record/`)— y las **mediciones
+para Windows** y la **grabación de sesiones** para repetirlas sin cámara, que
+todavía no tiene código; el acta de cada ronda, en cambio, ya está en
+`record/`— y las **mediciones
 sobre la cancha montada**, que necesitan el hardware en su lugar definitivo.
 
 Las medidas que todavía no están confirmadas llevan su estado escrito **en la

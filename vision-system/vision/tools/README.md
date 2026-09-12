@@ -202,10 +202,11 @@ Verifica el **árbitro**: el mapa de transiciones y el cronómetro oficial.
 python -m vision.tools.verificar_ronda
 ```
 
-Cinco bloques: las transiciones que se pueden y las que **no** —que `start` no
+Seis bloques: las transiciones que se pueden y las que **no** —que `start` no
 exista y que arrancar en `RUNNING` lance son parte de lo verificado—, los tres
 valores del cronómetro, el cierre por reto cumplido, la cadena completa
-contador + árbitro, y el acta.
+contador + árbitro, **las guardas de geometría** —que sin ver la cancha no se
+prepara ni se arranca una ronda, y que un apagón largo la cierra— y el acta.
 
 El reloj **se inyecta**, y por eso la herramienta existe: verificar el cierre por
 tiempo agotado durmiendo diez minutos haría que nadie la corriera nunca, y una

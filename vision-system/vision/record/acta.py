@@ -53,8 +53,9 @@ except ImportError:  # como script suelto
     from vision.configuracion import ConfigVision  # type: ignore[no-redef]
     from vision.mundo import VERSION_PROTOCOLO  # type: ignore[no-redef]
 
-#: Dónde se guardan. Hermana de `vision/`, no adentro: son datos de competencia,
-#: no parte del sistema, y el .gitignore las deja afuera del repositorio.
+#: Dónde se guardan: `vision/actas/`, al lado del resto de lo que el sistema
+#: produce en la máquina donde corre. Son datos de competencia y no parte del
+#: sistema, así que el .gitignore las deja afuera del repositorio.
 CARPETA = "actas"
 
 

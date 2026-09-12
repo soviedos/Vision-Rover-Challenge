@@ -391,8 +391,9 @@ Lo que queda es la **ventana de aceptación**: dónde puede caer el centro del c
 > 75 mm del borde. Cuidado con el reflejo de "empujarlo hasta el fondo": el
 > borde externo de la zona es **la línea entre los centros de los marcadores**,
 > no el borde de la mesa. Un cubo empujado más allá de esa línea **sobresale de
-> la zona y no cuenta**, aunque a ojo parezca bien puesto. Medido en la cancha
-> real: un cubo pasado 1,8 celdas de esa línea reportó **36 mm** de falta.
+> la zona y no cuenta**, aunque a ojo parezca bien puesto. Un cubo apoyado
+> **justo sobre** esa línea ya reporta **42,4 mm** de falta —media diagonal
+> entera—, y uno empujado media celda más allá, 52,4 mm.
 >
 > Los 32,6 mm de tolerancia son cómodos, y no siempre lo fueron: con el fondo de
 > 100 mm que tuvo la primera versión de la v2 eran **7,6 mm**, y en la cancha
@@ -617,15 +618,15 @@ agujero.
 
 ```python
 if cubo["age_ms"] < 200:
-    pass    # dato fresco, se puede navegar hacia ahí
+    pass    # dato fresco: la visión lo está viendo ahora
 elif cubo["age_ms"] < 1500:
     pass    # probablemente tapado por un rover; sigue estando ahí, con menos certeza
 else:
-    pass    # muy viejo: acercarse con cuidado y volver a mirar
+    pass    # muy viejo: hace rato que la visión no lo ve
 ```
 
-Elijan sus umbrales, pero **elíjanlos**. Tratar un dato de 3 segundos igual que
-uno de 20 ms es la forma más rápida de chocar.
+Elijan sus umbrales, pero **elíjanlos**. Un dato de 3 segundos y uno de 20 ms
+describen dos situaciones distintas, y el campo está para poder distinguirlas.
 
 Y al revés: **que un cubo tenga `age_ms` alto no quiere decir que se lo llevaron**.
 Quiere decir que la visión no lo ve. Casi siempre sigue justo donde dice.
@@ -655,12 +656,13 @@ así que ese número es la edad real del dato desde que la cámara lo vio.
 ```python
 latencia_ms = int(time.time() * 1000) - msg["ts_ms"]
 if latencia_ms > 500:
-    frenar()        # estoy manejando a ciegas
+    pass            # el dato más nuevo que tengo es de hace medio segundo
 ```
 
 Si la latencia se dispara —red saturada, su bucle trabado, la visión atrasada—
-lo correcto es **frenar**, no seguir con la última orden. Un rover que sigue
-avanzando con datos de hace un segundo choca.
+el mensaje que están usando describe un instante que **ya pasó**. El contrato les
+da el número para que puedan saberlo; qué hacer con él es decisión de cada
+equipo.
 
 > Esto supone que el reloj del rover y el de la visión están más o menos en
 > hora. Si difieren mucho, la latencia absoluta va a estar corrida; en ese caso
@@ -1214,8 +1216,6 @@ Este formato **es un contrato**. No cambia sin:
 1. **subir `v`**, y
 2. **avisarles** con tiempo.
 
-### Migración de la v1 a la v2
-
 ### El campo `clock`, agregado dentro de la v2
 
 La v2 **sumó `clock` sin subir la versión**, y conviene que quede escrito por qué,
@@ -1229,6 +1229,8 @@ escribir un número distinto sin que nadie ganara nada.
 
 **Esto no vuelve a pasar.** Con clientes en la calle, un campo nuevo es un cambio
 de contrato como cualquier otro y va con cambio de versión y aviso.
+
+### Migración de la v1 a la v2
 
 **Qué NO se rompe.** Nada de la forma del mensaje que ya consumían: `grid`,
 `rovers`, `cubes`, `obstacles`, `phase`, `seq`, `ts_ms`, `start` y `depots`

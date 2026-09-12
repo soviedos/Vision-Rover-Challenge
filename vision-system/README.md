@@ -131,7 +131,7 @@ rover que decide girar:
   │   captura       │      exacta en que se tomó.
   └────────┬────────┘
            ▼
-  ┌─────────────────┐   ②  Quita la curvatura que mete el lente gran angular,
+  ┌─────────────────┐   ②  Quita la curvatura que mete el lente de la cámara,
   │   geometry/     │      usando el perfil de ESA cámara. Va antes que todo lo
   │   rectificación │      demás: la geometría de ③ supone que las rectas del
   └────────┬────────┘      mundo se ven rectas, y la distorsión rompe eso.
@@ -585,6 +585,7 @@ completo, el mismo que aparece en [`contrato/CONTRATO.md`](contrato/CONTRATO.md)
   "seq": 4137,
   "ts_ms": 1785012345678,
   "phase": "RUNNING",
+  "clock": { "elapsed_ms": 88000, "remaining_ms": 512000, "total_ms": 600000 },
   "grid": { "cols": 43, "rows": 43, "cell_mm": 20.0 },
   "rovers": [
     { "id": 10, "col": 18.402, "row": 6.705,  "theta": 84.20, "age_ms": 0 },
@@ -692,7 +693,7 @@ Otras formas de arrancarlo:
 
 Al arrancar pregunta **qué cámara** usar y qué perfil de calibración, y después
 queda corriendo. Mientras corre, el operador de la infraestructura oficial puede
-escribir por teclado `ready`, `start`, `stop`, `quit`. Estos comandos cambian la
+escribir por teclado `ready`, `stop`, `abort`, `quit`. Estos comandos cambian la
 fase publicada por el sistema de visión y deben utilizarse de acuerdo con la
 señal del juez y la operación de la competencia.
 
@@ -719,7 +720,8 @@ no se está detectando; si algo se pone ámbar, está viejo y su edad está crec
 
 Es un **consumidor**: solo lee, se refresca a su propio reloj y **no le cuesta
 nada al procesamiento** —medido, 179 cuadros en 6 segundos con y sin ventana—.
-Desde la ventana se maneja con `r` ready · `s` start · `f` stop · `q` salir.
+Desde la ventana se maneja con `r` ready · `f` stop · `a` abort · `q` salir.
+No hay tecla para arrancar la ronda: de `READY` a `RUNNING` pasa el reloj solo.
 
 > **Sin argumentos abre la cámara.** Lo sintético hay que **pedirlo**, y cuando
 > corre así el sistema lo repite en pantalla en un cartel imposible de pasar por
@@ -750,8 +752,8 @@ python3 mock_publisher.py     # terminal 1: el simulador
 python3 test_client.py        # terminal 2: el cliente de prueba
 ```
 
-En la terminal 1, escribí `ready` y después `start`. Vas a ver la telemetría
-llegando y validándose.
+En la terminal 1, escribí `ready` y **esperá**: al agotarse la preparación, la
+ronda arranca sola. Vas a ver la telemetría llegando y validándose.
 
 La guía completa, paso a paso y a prueba de principiantes, está en la sección 7
 de [`contrato/CONTRATO.md`](contrato/CONTRATO.md).
@@ -835,7 +837,7 @@ va engrosando. Así siempre hay algo que funciona y se puede verificar.
 | **Generador sintético** (`vision/sources/`) | Crea imágenes del tablero con marcadores y rovers, **conociendo la verdad** de lo que dibujó. |
 | **Captura real** (`vision/sources/`) | Lee la webcam USB en un hilo propio que **nunca bloquea**, con exposición, enfoque y balance de blancos fijos —y **verificados por efecto**, porque muchas cámaras aceptan el ajuste y siguen haciendo lo que quieren—. Incluye un menú para elegir qué cámara abrir. |
 | **Geometría de esquinas** (`vision/geometry/`) | Detecta los 4 marcadores y convierte píxeles a celdas. Verificado contra la verdad del generador sintético, con los marcadores de **100 mm** reales: **exacto** con la cámara cenital y **0,44 mm** de error máximo con la cámara inclinada. El centro de cada marcador sale de **cruzar sus diagonales** y no de promediar sus esquinas (ver más abajo). |
-| **Calibración de distorsión** (`vision/geometry/`) | Corrige la curvatura del lente gran angular. **Dos cámaras ya calibradas y verificadas**: ArgomTech CAM40 (1920×1080, 0,314 px) y Logitech C270 (1280×720, 0,206 px). |
+| **Calibración de distorsión** (`vision/geometry/`) | Corrige la curvatura del lente. Hace falta en **toda** cámara, también en las que no son gran angular: la C270 oficial mide 47,1° × 27,6° y distorsiona igual. **Dos cámaras ya calibradas y verificadas**: ArgomTech CAM40 (1920×1080, 0,314 px) y Logitech C270 (1280×720, 0,206 px). |
 | **Perfiles por cámara** (`vision/geometry/`) | Cada aparato guarda su propia calibración, y el sistema **avisa cuando el perfil no le corresponde** a la cámara conectada, en vez de corregir mal en silencio. |
 | **Detección de rovers** (`vision/detectors/`) | Encuentra los rovers por su marcador y deduce su **celda y su ángulo**, calculados en celdas y no en píxeles porque la perspectiva no conserva los ángulos. Verificado contra la verdad del generador: **0,8 mm** de error de posición y **1,3°** de orientación con la cámara inclinada, sobre 36 rovers repartidos. |
 | **Detección de cubos** (`vision/detectors/`) | Encuentra los cubos por color —croma en Lab para separar, matiz para clasificar— y los ubica por su **base**, ajustando el modelo del cubo al contorno visible. **1,05 mm** con el cubo despejado y **4,88 mm** con un rover empujándolo y tapándole el 22 %. |

@@ -277,7 +277,7 @@ intercambiables entre sí; lo único que importa es esquivarlos.
 > lista**: simplemente llega sin elementos.
 >
 > **Esto NO es un cambio de contrato.** El formato es idéntico y `v` sigue
-> valiendo `1`. No hay que tocar nada: si iteran la lista —como manda la
+> valiendo `2`. No hay que tocar nada: si iteran la lista —como manda la
 > [regla 6.1](#61-iterar-nunca-indexar-por-posición-fija)— no encuentran nada y
 > siguen de largo. El código que escriban hoy va a seguir funcionando si en una
 > edición futura vuelven los obstáculos.
@@ -820,7 +820,7 @@ Conectando a 127.0.0.1:2026 ...
 Conectado. Ctrl-C para cortar.
 
 --- primer mensaje: ejemplo de consumo -------------------------
-  cancha: 43x43 celdas de 20.0 mm  |  fase: IDLE
+  cancha: 43x43 celdas de 20.0 mm  |  fase: IDLE  |  sin cuenta
   rover id=10  col=3.95 row=17.51 theta=0.4°  age=0 ms
   rover id=11  col=3.97 row=25.46 theta=0.9°  age=0 ms
   zona de acopio: 10.0 x 7.5 celdas (largo x fondo)  |  cubo: 3.0 celdas de lado

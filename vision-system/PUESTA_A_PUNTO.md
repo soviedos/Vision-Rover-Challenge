@@ -51,9 +51,10 @@ error acá, no sigas: el problema es la instalación, no tu cámara.
 
 ## 1. Qué vas a hacer, y por qué
 
-Toda cámara con lente ancho **curva las líneas rectas**. Es física del lente, no
-un defecto: mirá una foto tuya con gran angular y vas a ver los bordes
-combados.
+**Toda** cámara curva las líneas rectas. Es física del lente, no un defecto: se
+ve exagerado en una foto con gran angular, donde los bordes quedan combados,
+pero pasa también en las que no lo son —la Logitech C270 del reto mide 47,1° ×
+27,6° y distorsiona igual—. Por eso hay que calibrar la tuya, sea cual sea.
 
 Eso es un problema para nosotros, porque el sistema calcula dónde está cada
 cosa **suponiendo que las líneas rectas se ven rectas**. Si el lente las curva,

@@ -49,7 +49,7 @@ revisar, en vez de devolver coordenadas en las que no se puede confiar.
 > [`MONTAJE.md`](../../MONTAJE.md). Pegarlos en otro orden rota todas las
 > coordenadas.
 
-### `distorsion.py` — corrección del lente gran angular
+### `distorsion.py` — corrección de la distorsión del lente
 
 Un lente ancho **curva las líneas rectas**, y cada vez más cerca de los bordes.
 La homografía de `coordenadas.py` **no puede arreglar eso**: es exacta para

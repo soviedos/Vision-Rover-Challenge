@@ -201,9 +201,13 @@ documento.** De ahí que no se escriba acta de una ronda sin geometría.
   envejecen) y los lugares fijos se **declaran** (están siempre, no envejecen).
 
 ### Cámara
-- **Webcam USB**, lente **gran angular**, **enfoque manual**.
+- **Webcam USB**, **enfoque manual**. La cámara oficial del reto es la Logitech
+  C270 y **NO es gran angular**: 47,1° × 27,6° medidos en su propia calibración,
+  que es lo que obliga a montarla a **2,04 m como mínimo** para que entre la
+  cancha.
 - **Exposición, enfoque y balance de blancos SIEMPRE fijos, nunca en automático.**
-- **Calibración de distorsión obligatoria** por el lente ancho.
+- **Calibración de distorsión obligatoria.** No por ser un lente ancho —no lo
+  es—: **toda** cámara curva las rectas, y la geometría supone que se ven rectas.
 
 ### Percepción
 - **Detección de color:** segmentar por **saturación** (el tablero es acromático)

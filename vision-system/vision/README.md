@@ -117,13 +117,14 @@ Desde `vision-system/`, con el entorno virtual ya creado (ver el
 ```
 
 Sin argumentos abre la **cámara**. Lo sintético hay que pedirlo, y el sistema lo
-avisa en pantalla todo el tiempo. Mientras corre se le escribe `ready`, `start`,
-`stop` o `quit`.
+avisa en pantalla todo el tiempo. Mientras corre se le escribe `ready`, `stop`,
+`abort` o `quit`. **No hay comando para arrancar la ronda**: de `READY` a
+`RUNNING` pasa el reloj solo, al agotarse la preparación.
 
 Con `--ventana` se abre la **vista en vivo**: la imagen con los marcadores, la
 grilla reproyectada, los rovers con su flecha y los cubos con su base, cada uno
 etiquetado con **la celda que se está publicando**. Desde la ventana se maneja
-con `r` / `s` / `f` / `q`.
+con `r` ready / `f` stop / `a` abort / `q` o ESC para salir.
 
 La vista se refresca a su propio reloj —12 Hz por defecto, `--ventana-hz` lo
 cambia— así que **no le cuesta nada al procesamiento**: medido, 179 cuadros en

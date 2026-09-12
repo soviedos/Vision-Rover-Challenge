@@ -9,7 +9,8 @@ Corre con Python puro: solo biblioteca estándar más `schema.py`.
     python -m contrato.mock_publisher            # config por defecto
     python -m contrato.mock_publisher --port 2026
 
-Comandos por teclado, mientras corre: `ready`, `start`, `stop`, `quit`.
+Comandos por teclado, mientras corre: `ready`, `stop`, `abort`, `quit`. No hay
+comando para arrancar la ronda: de `READY` a `RUNNING` pasa el reloj solo.
 
 Por qué el simulador reproduce las patologías a propósito
 ---------------------------------------------------------

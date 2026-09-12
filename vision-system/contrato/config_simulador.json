@@ -45,7 +45,7 @@
   "obstacles": [],
   "_nota_obstacles": "Bloques amarillos de 10 cm. No llevan color ni id: el amarillo está reservado para obstáculos y son intercambiables entre sí.",
 
-  "_POR_QUE_VACIO": "⚠️ VACÍO A PROPÓSITO: la primera edición del reto NO usa obstáculos. El campo `obstacles` SIGUE EXISTIENDO en el mensaje y sigue siendo una lista; simplemente viene sin elementos. Eso NO es un cambio de contrato —el formato es idéntico y la versión sigue siendo 1—, así que ningún equipo tiene que tocar su código: quien itera la lista, como manda la regla 6.1, no encuentra nada y sigue.",
+  "_POR_QUE_VACIO": "⚠️ VACÍO A PROPÓSITO: la primera edición del reto NO usa obstáculos. El campo `obstacles` SIGUE EXISTIENDO en el mensaje y sigue siendo una lista; simplemente viene sin elementos. Eso NO es un cambio de contrato —el formato es idéntico y la versión sigue siendo 2—, así que ningún equipo tiene que tocar su código: quien itera la lista, como manda la regla 6.1, no encuentra nada y sigue.",
 
   "_POR_QUE_NO_SE_DEJAN_DE_EJEMPLO": "Porque el simulador y la cancha real no pueden decir cosas distintas. Los equipos desarrollan contra esto, y un simulador que emite obstáculos que nunca van a existir hace que veinte equipos escriban lógica de esquive para nada. Si en una edición futura vuelven, se agregan acá y el mensaje deja de traer la lista vacía, sin cambiar el contrato ni avisar nada.",
 

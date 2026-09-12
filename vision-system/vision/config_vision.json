@@ -373,7 +373,7 @@
     "_NOTA_RESOLUCION": "1280x720 es el máximo de video de la C270 y es la resolución a la que está CALIBRADA. Pedirle 1920x1080 —como decía antes, que era lo de la ArgomTech— hace que la imagen no coincida con su perfil de distorsión, y el sistema avisa pero la corrección saldría mal. Si se cambia de cámara, hay que cambiar esto Y el perfil por defecto, juntos."
   },
   "calibracion": {
-    "_acerca_de": "Calibración INTRÍNSECA del lente: mide cuánto curva las líneas rectas el gran angular, para poder corregirlo. Se hace con un patrón de ajedrez movido en el aire, que NO es el tablero de juego. Es una capa previa: se corrige la imagen y recién después se detectan marcadores y se calcula la geometría de esquinas.",
+    "_acerca_de": "Calibración INTRÍNSECA del lente: mide cuánto curva las líneas rectas, para poder corregirlo. La curvatura NO es cosa de los gran angulares: TODA cámara la tiene, incluida la C270 oficial del reto, que con 47,1° x 27,6° no es gran angular y distorsiona igual. Por eso se calibra la cámara que se vaya a usar, sea cual sea. Se hace con un patrón de ajedrez movido en el aire, que NO es el tablero de juego. Es una capa previa: se corrige la imagen y recién después se detectan marcadores y se calcula la geometría de esquinas.",
     "patron": {
       "columnas_internas": 13,
       "filas_internas": 6,

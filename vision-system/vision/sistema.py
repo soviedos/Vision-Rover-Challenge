@@ -6,7 +6,8 @@ Cómo se corre:
     python -m vision.sistema --sintetico      # sin cámara, con imágenes generadas
     python -m vision.sistema --fase RUNNING   # arrancar ya en juego
 
-Mientras corre, se escribe por teclado: `ready`, `start`, `stop`, `quit`.
+Mientras corre, se escribe por teclado: `ready`, `stop`, `abort`, `quit`. No hay
+comando para arrancar la ronda: de `READY` a `RUNNING` pasa el reloj solo.
 
 Un solo sistema, y lo único que cambia es la entrada
 -----------------------------------------------------

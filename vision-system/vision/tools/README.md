@@ -348,6 +348,51 @@ El indicador que más importa apuntando al tablero físico es
 **"MARCADORES DE ESQUINA: 4 de 4"**: significa que el mundo real se comporta como
 lo sintético y las coordenadas se pueden anclar.
 
+### `diagnostico_falsos_positivos.py`
+
+Mide **cuántos marcadores inventa el detector de ArUco** sobre la cancha real.
+
+```bash
+python -m vision.tools.diagnostico_falsos_positivos
+python -m vision.tools.diagnostico_falsos_positivos --minutos 5
+python -m vision.tools.diagnostico_falsos_positivos --sintetico   # probar la herramienta
+```
+
+> ⚠️ **La cancha tiene que estar VACÍA**: los cuatro marcadores de esquina y nada
+> más. Todo lo que aparezca que no sea una esquina es, por definición, un falso
+> positivo.
+
+**No corrige nada, y es el punto.** El tablero es una cuadrícula fina de blanco y
+negro —exactamente la clase de textura con la que se construye un código ArUco— y
+`DICT_4X4_50` tiene poca distancia entre códigos, así que un recorte afortunado
+puede parecerse lo suficiente a un marcador válido. Elegir umbrales para eso a
+ojo es adivinar; esta herramienta da los números con los que decidir.
+
+De cada detección que no sea una esquina registra:
+
+| Qué | Para qué sirve |
+|---|---|
+| **ID** | si cae en un ID declarado de rover, el fantasma **pisa a un rover de verdad**, en silencio |
+| **Lado en mm** sobre el plano del tablero | un marcador real mide 100 mm (esquina) o 40 (rover); un fantasma casi nunca |
+| **Error de cuadratura** | en celdas un marcador real vuelve a ser un cuadrado: sus cuatro lados y sus dos diagonales coinciden. Un recorte de la cuadrícula, no |
+| **Racha** | cuántos cuadros CONSECUTIVOS duró. Un fantasma vive uno o dos y salta a otro lado |
+
+Todo se mide **en celdas y no en píxeles**: en píxeles, un marcador cerca del
+borde de la imagen se ve más chico que el mismo marcador en el centro, así que
+los tamaños no se podrían comparar entre sí. La homografía deshace exactamente
+eso.
+
+**Los cuatro marcadores de esquina se miden también, con la misma vara.** Son el
+**control**: sin saber cuánto se desvía un marcador legítimo no hay forma de
+elegir la tolerancia con la que rechazar a los falsos.
+
+El informe final da la tasa por minuto —en detecciones y en apariciones
+distintas—, qué IDs aparecieron, la distribución de tamaños y cuántos de esos
+tamaños caen cerca de un marcador real. También informa **cuánto infla el
+paralaje** al marcador del rover, que está a 90 mm de altura y por eso se mide
+más grande de lo que es: quien fije una tolerancia de tamaño tiene que
+contemplarlo.
+
 ### `patron_calibracion.py`
 
 Genera en PDF, **a tamaño real**, el ajedrezado que necesita la calibración.

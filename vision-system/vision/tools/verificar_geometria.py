@@ -472,6 +472,23 @@ def verificar_admision(cfg) -> bool:
         print("  {:<52} {:>14} {:>14}  {}".format(
             nombre, cuadros(entradas), cuadros(esperado), "OK" if paso else "FALLA"))
 
+    # Y una cosa más, que no es sobre quién entra sino sobre qué se informa. El
+    # aviso del sistema dice, de lo que sigue esperando, "si hay un robot de
+    # verdad ahí, no se está viendo estable". Dicho de un rover que YA entró,
+    # manda a revisar una cancha que no tiene nada. Pasó en vivo: los dos rovers
+    # entraron en el cuadro 5 y el aviso los siguió dando por esperando, porque
+    # la racha sigue creciendo después de la admisión.
+    registro = RegistroAdmision(cfg)
+    for _ in range(necesarios + 5):
+        registro.filtrar({id_rover: relleno}, {})
+    quedan = registro.esperando
+    paso = not quedan
+    todo_bien = todo_bien and paso
+    print("  {:<52} {:>14} {:>14}  {}".format(
+        "un rover ya admitido NO figura como esperando",
+        "{}".format(sorted(quedan) if quedan else "ninguno"), "ninguno",
+        "OK" if paso else "FALLA"))
+
     print("\n  resultado: {}\n".format("TODO OK" if todo_bien else "HAY FALLAS"))
     return todo_bien
 

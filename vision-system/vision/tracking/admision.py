@@ -14,14 +14,27 @@ la cancha, y la segunda es la peligrosa:
   478 mm entre cuadros con edad de 133 ms.
 
 Esta pieza ataja eso exigiendo que una identidad **nueva** se vea en varios
-cuadros consecutivos antes de aceptarla. Un fantasma no lo consigue: sobre 361
-detecciones falsas medidas en cuatro corridas, la racha más larga fue de **dos
-cuadros**.
+cuadros consecutivos antes de aceptarla. Un fantasma no lo consigue: la racha más
+larga medida fue de **dos cuadros**, tanto en las dos sesiones con datos crudos
+guardados —196 detecciones falsas, 25 IDs distintos— como en las cuatro corridas
+completas, 361 detecciones. Dos en todas.
+
+Por qué el margen es holgado y no justo
+---------------------------------------
+Hacen falta **cinco** cuadros, no tres, porque los dos costos no se parecen:
+
+- **subirlo** cuesta 66 ms más, **una sola vez**, al poner el robot;
+- **equivocarse** cuesta hasta un **minuto**. Un fantasma admitido deja de ser
+  una detección suelta: se vuelve **identidad seguida**, y las detecciones
+  siguientes la refrescan, así que el error se sostiene hasta que lo barre
+  `edad_maxima_ms`.
+
+Con esa asimetría el umbral no se elige apretado contra el peor caso medido.
 
 Solo la primera aparición
 -------------------------
-El costo se paga **una sola vez**, cuando el robot entra a la cancha: tres
-cuadros son unos 100 ms a 30 fps. Durante la ronda no cuesta nada, porque un ID
+El costo se paga **una sola vez**, cuando el robot entra a la cancha: cinco
+cuadros son unos 166 ms a 30 fps. Durante la ronda no cuesta nada, porque un ID
 que ya está en la memoria del seguimiento se acepta **de inmediato**, incluso
 después de una oclusión larga: ya demostró que existe.
 
@@ -63,8 +76,14 @@ class RegistroAdmision:
     def __init__(self, cfg: ConfigVision):
         self._cfg = cfg
         self._necesarios = cfg.deteccion_marcadores.cuadros_para_admitir_rover
-        #: Cuántos cuadros consecutivos lleva visto cada ID que todavía no entró.
+        #: Cuántos cuadros consecutivos lleva visto cada ID de rover.
         self._rachas: dict[int, int] = {}
+        #: Los que ya entraron. La racha sigue creciendo después de la admisión
+        #: —no hay motivo para reiniciarla—, así que sin esta marca `esperando`
+        #: informaría como "esperando" a un rover que entró bien, y su aviso
+        #: manda a revisar el montaje. Un aviso que se equivoca hace perder más
+        #: tiempo que no tenerlo.
+        self._admitidos: set[int] = set()
 
     def filtrar(
         self,
@@ -93,6 +112,7 @@ class RegistroAdmision:
             self._rachas[id_aruco] = racha
             if racha >= self._necesarios:
                 aceptados[id_aruco] = esquinas
+                self._admitidos.add(id_aruco)
             else:
                 en_espera.append((id_aruco, racha))
 
@@ -102,10 +122,17 @@ class RegistroAdmision:
         for id_aruco in list(self._rachas):
             if id_aruco not in detectados:
                 del self._rachas[id_aruco]
+                self._admitidos.discard(id_aruco)
 
         return aceptados, tuple(en_espera)
 
     @property
     def esperando(self) -> dict[int, int]:
-        """Las rachas en curso, para el diagnóstico."""
-        return dict(self._rachas)
+        """Los que están esperando **ahora**, para el diagnóstico.
+
+        Los ya admitidos quedan afuera aunque su racha siga creciendo: esto es
+        lo que alimenta un aviso que dice "si hay un robot de verdad ahí, no se
+        está viendo estable", y decirlo de un rover que entró bien es mandar a
+        revisar una cancha que no tiene nada.
+        """
+        return {i: n for i, n in self._rachas.items() if i not in self._admitidos}

@@ -72,8 +72,8 @@ considera dudosa, y encima presentarla como fresca.
 ## Admisión: una identidad nueva tiene que sostenerse
 
 `admision.py` es lo último que decide si un **ID de rover que el seguimiento no
-venía siguiendo** entra al estado del mundo: tiene que verse **3 cuadros
-seguidos**, unos 100 ms.
+venía siguiendo** entra al estado del mundo: tiene que verse **5 cuadros
+seguidos**, unos 166 ms.
 
 El modo de falla que ataja es concreto y ya se vio de verdad. Un fantasma con el
 ID de un rover hace dos cosas distintas:
@@ -93,8 +93,15 @@ coordenadas entero.
 medidos.** Porque ese margen es una propiedad de **esta** escena, esta luz y esta
 altura de cámara, no del sistema: el fantasma más grande medido está a factor
 **1,9** del umbral, no a factor 10. Esta defensa no depende de ningún margen, sino
-de que un fantasma no se sostenga —sobre 361 detecciones falsas medidas, la racha
-más larga fue de **dos** cuadros—. Es la red, no la defensa principal.
+de que un fantasma no se sostenga —la racha más larga medida fue de **dos**
+cuadros, igual en las dos sesiones guardadas (196 detecciones falsas) que en las
+cuatro corridas completas (361)—. Es la red, no la defensa principal.
+
+**Por qué cinco y no tres.** Porque los dos costos no se parecen. Subir el umbral
+cuesta 66 ms más **una sola vez**; equivocarse cuesta hasta un **minuto**, porque
+un fantasma admitido se vuelve **identidad seguida** y las detecciones siguientes
+lo refrescan, así que el error se sostiene hasta que lo barre `edad_maxima_ms`.
+Con esa asimetría, el margen sobre el peor caso medido no se elige apretado.
 
 ## El barrido no es para oclusiones
 

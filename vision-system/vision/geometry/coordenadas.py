@@ -225,7 +225,7 @@ def _desvio_del_esperado(
         lado_esperado = cfg.marcadores_esquina.lado_mm
         celda_esperada = cfg.marcadores_esquina.disposicion[id_aruco]
     elif id_aruco in cfg.deteccion_rovers.ids_rover:
-        # El marcador del rover está a 90 mm del tablero, así que NO está en el
+        # El marcador del rover está a 80 mm del tablero, así que NO está en el
         # plano de la homografía: se ve más grande y corrido hacia afuera. Las
         # dos cosas las da la pose de cámara, y las dos hay que aplicarlas, o la
         # comparación mezcla espacios distintos.
@@ -253,6 +253,105 @@ def _desvio_del_esperado(
         distancia_mm *= sistema.cell_mm
         desvio += distancia_mm / lado_esperado
     return desvio, lado
+
+
+@dataclass(frozen=True, slots=True)
+class Rechazo:
+    """Un marcador detectado que NO es plausible, y por qué.
+
+    Se informa en vez de descartarse en silencio: la cuenta de rechazos es la
+    que va a decir si el problema se agrava —otra luz, otro tablero, otra
+    cámara— y, sobre todo, si alguna vez el filtro empieza a comerse marcadores
+    de verdad. Un filtro mudo que rechaza de más es indistinguible de una
+    cámara que no ve.
+    """
+
+    id: int
+    motivo: str          # "tamaño" o "posición"
+    lado_mm: float
+    esperado_mm: float
+    col: float
+    row: float
+
+
+def _lado_esperado_mm(id_aruco: int, cfg: ConfigVision, pose: "PoseCamara | None") -> float | None:
+    """Cuánto DEBERÍA medir el marcador de ese ID, o `None` si no se sabe.
+
+    El del rover no es una constante: está a 80 mm del tablero, así que se ve
+    más grande, y el factor sale de la pose de cámara. Eso regala una
+    comprobación gratis: si lo medido se apartara de lo teórico, hay algo mal en
+    la altura declarada o en la pose, y se ve en el aviso.
+    """
+    if id_aruco in cfg.marcadores_esquina.ids_esperados:
+        return cfg.marcadores_esquina.lado_mm
+    if id_aruco in cfg.deteccion_rovers.ids_rover:
+        altura = cfg.paralaje.altura_marcador_rover_mm
+        factor = pose.factor_paralaje(altura) if pose is not None else 1.0
+        return cfg.elementos.marcador_rover.lado_mm * factor
+    return None
+
+
+def filtrar_plausibles(
+    crudos: tuple[tuple[int, np.ndarray], ...],
+    cfg: ConfigVision,
+    sistema: SistemaCoordenadas | None,
+    pose_rover: "PoseCamara | None" = None,
+) -> tuple[tuple[tuple[int, np.ndarray], ...], tuple[Rechazo, ...]]:
+    """Descarta lo que no puede ser un marcador de esta cancha.
+
+    Dos preguntas, las dos con información que el sistema ya tiene y ninguna con
+    un umbral inventado:
+
+    **¿Mide lo que tiene que medir?** El lado se mide en milímetros sobre el
+    plano del tablero con la homografía, y se compara contra el esperado con la
+    tolerancia declarada. Medido sobre la cancha real: los marcadores legítimos
+    caen entre −8,3 % y +0 % del esperado, y las 361 detecciones falsas de
+    cuatro corridas midieron **siempre** entre 13,2 y 18,0 mm, contra los 41,6
+    del marcador del rover. Un factor 2,3 de separación no necesita ajuste fino.
+
+    **¿Está donde puede haber un marcador?** Fuera de la cancha más un margen no
+    hay nada que detectar. El margen no es cero: el paralaje empuja hacia afuera
+    y un rover sobre el borde se publica legítimamente en columna negativa.
+
+    Sin geometría —el primer cuadro— no hay con qué medir, así que **no se
+    filtra nada**: es preferible dejar pasar un fantasma que rechazar al
+    marcador que está por establecer las coordenadas.
+
+    Se filtra ANTES de resolver duplicados, y el orden importa: un fantasma que
+    cae por tamaño deja de disputar el ID, así que el duplicado desaparece en
+    vez de tener que resolverse. Medido en la cancha, eso convierte trece
+    disputas por minuto en ninguna.
+    """
+    if sistema is None:
+        return crudos, ()
+
+    tolerancia = cfg.deteccion_marcadores.tolerancia_tamano
+    margen = cfg.deteccion_marcadores.margen_fuera_de_cancha_celdas
+    cols, rows = cfg.tablero.cols, cfg.tablero.rows
+
+    aceptados = []
+    rechazos = []
+    for id_aruco, esquinas in crudos:
+        celdas = sistema.a_celdas(np.asarray(esquinas, dtype=np.float64).reshape(4, 2))
+        col, row = centro_de(celdas)
+        lado = lado_mm_de(esquinas, sistema)
+
+        if not (-margen <= col <= cols + margen and -margen <= row <= rows + margen):
+            rechazos.append(Rechazo(id=id_aruco, motivo="posición", lado_mm=lado,
+                                    esperado_mm=0.0, col=col, row=row))
+            continue
+
+        esperado = _lado_esperado_mm(id_aruco, cfg, pose_rover)
+        # De un ID que no es ni esquina ni rover no se espera NADA, así que no
+        # hay contra qué compararlo. No hace falta: la lista blanca de IDs ya lo
+        # descarta más adelante, y el sistema lo informa.
+        if esperado is not None and abs(lado - esperado) > tolerancia * esperado:
+            rechazos.append(Rechazo(id=id_aruco, motivo="tamaño", lado_mm=lado,
+                                    esperado_mm=esperado, col=col, row=row))
+            continue
+
+        aceptados.append((id_aruco, esquinas))
+    return tuple(aceptados), tuple(rechazos)
 
 
 def resolver_duplicados(

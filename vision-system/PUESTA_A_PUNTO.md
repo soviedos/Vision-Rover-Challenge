@@ -492,7 +492,80 @@ ven con `--historial`.
 
 ---
 
-## 7. Si algo sale mal
+## 7. Los marcadores que el sistema inventa
+
+Con la cancha montada y la cámara puesta, el sistema **encuentra marcadores
+ArUco donde no hay ninguno**. No es un defecto de tu cámara ni algo que hayas
+hecho mal: el tablero está cubierto de una cuadrícula fina de blanco y negro,
+que es exactamente la materia prima con la que se dibuja un código ArUco, y de
+tanto en tanto un recorte de esa cuadrícula se parece lo suficiente a un código
+válido.
+
+### 7.1 — Cuántos son, y cómo se reconocen
+
+Medido sobre la cancha real, en corridas de dos minutos:
+
+| | |
+|---|---|
+| Cuántos | entre **28 y 54 por minuto**, según la luz y la escena |
+| Cuánto miden | **13 a 18 mm** de lado, siempre |
+| Cuánto duran | **1 o 2 cuadros**, y saltan a otro lado |
+| Dónde caen | sobre todo en la **franja del borde del tablero** |
+
+Compará con un marcador de verdad: el de una esquina mide **100 mm** y el del
+rover **40**, y se detectan **cuadro tras cuadro sin interrumpirse** —medido:
+3095 cuadros seguidos—. Un fantasma no se parece en nada a eso, y en esa
+diferencia se apoyan las defensas del sistema.
+
+### 7.2 — Qué hace el sistema, sin que tengas que tocar nada
+
+1. **Los mide.** Con la homografía sabe cuánto mide cada marcador detectado
+   **en milímetros sobre el tablero**, y rechaza lo que no se parezca al tamaño
+   que corresponde a ese ID. El tamaño esperado no está escrito a mano: se
+   deriva de la medida del marcador y de la altura a la que está montado.
+2. **Los ubica.** Lo que caiga fuera de la cancha, con un margen, no puede ser
+   un marcador y se descarta.
+3. **Resuelve las colisiones.** El caso peligroso es un fantasma que decodifica
+   con el ID de un marcador de verdad: no se suma, **compite** con él. El
+   sistema mide los dos candidatos y se queda con el que se parece al marcador
+   que espera; si no puede decidir, descarta el cuadro y conserva el último
+   estado bueno.
+
+### 7.3 — Qué mirar vos
+
+En la línea de estado que el sistema imprime cada cinco segundos:
+
+```
+[estado] fase=IDLE cuadros=3001 fallos=1 ... duplicados=26 rechazados=100
+```
+
+- **`rechazados`** son los fantasmas que el filtro atajó. Que suba es normal.
+- **`duplicados`** son las veces que un fantasma tomó el ID de un marcador real.
+
+Si además aparece un aviso diciendo que se rechazó un marcador **del tamaño
+correcto**, prestale atención: eso ya no es un fantasma de la cuadrícula.
+
+### 7.4 — Si los números se disparan
+
+| Qué ves | Qué probar |
+|---|---|
+| Muchos más rechazos que de costumbre | Mirá la luz: un reflejo fuerte sobre el tablero multiplica los fantasmas |
+| Se concentran en una zona | Es un rasgo físico de ahí —un borde, una sombra, un brillo—: tapalo o corré la luz |
+| El sistema descarta cuadros por no poder decidir | Avisá: significa que hay dos candidatos igual de plausibles para un mismo ID |
+
+Para medirlos vos mismo, con la cancha vacía y dos minutos:
+
+```bash
+.venv/bin/python -m vision.tools.diagnostico_falsos_positivos --minutos 2 --guardar
+```
+
+Te informa cuántos hubo, de qué tamaño, cuánto duraron y en qué zona del tablero
+cayeron, y con `--guardar` deja los datos crudos en `vision/mediciones/` para
+poder compararlos con los de otro día.
+
+---
+
+## 8. Si algo sale mal
 
 | Síntoma | Causa más probable | Qué hacer |
 |---|---|---|

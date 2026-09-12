@@ -95,11 +95,21 @@ class DeteccionMarcadores:
     avisar; ahora se resuelve por plausibilidad y, si no se puede resolver, se
     descarta el cuadro.
 
+    `tolerancia_tamano` es cuánto puede apartarse el lado medido del esperado, y
+    el esperado **se deriva**: `lado_mm` del marcador por el factor de paralaje
+    que sale de la pose de cámara. Ningún número inflado escrito a mano.
+
+    `margen_fuera_de_cancha_celdas` no es cero a propósito: la corrección de
+    paralaje empuja hacia afuera y un rover sobre el borde se publica
+    legítimamente en columna negativa.
+
     `margen_decision_duplicados` es un margen **relativo**, no un umbral físico:
     cuánto mejor tiene que ser el mejor candidato que el segundo para quedarse
     con el ID. Por eso no depende de la cancha ni de la cámara.
     """
 
+    tolerancia_tamano: float
+    margen_fuera_de_cancha_celdas: float
     margen_decision_duplicados: float
 
 
@@ -757,9 +767,11 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
         desvio_maximo_mm=float(m["desvio_maximo_mm"]),
     )
 
+    dm = d["deteccion_marcadores"]
     deteccion_marcadores = DeteccionMarcadores(
-        margen_decision_duplicados=float(
-            d["deteccion_marcadores"]["margen_decision_duplicados"]),
+        tolerancia_tamano=float(dm["tolerancia_tamano"]),
+        margen_fuera_de_cancha_celdas=float(dm["margen_fuera_de_cancha_celdas"]),
+        margen_decision_duplicados=float(dm["margen_decision_duplicados"]),
     )
 
     elementos = _leer_elementos(d["elementos"])
@@ -1136,6 +1148,19 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         return (
             "marcadores_esquina.borde_blanco_mm debe ser > 0: sin zona blanca alrededor "
             "el detector de ArUco no encuentra el marcador"
+        )
+    tol = cfg.deteccion_marcadores.tolerancia_tamano
+    if not (0.0 < tol < 1.0):
+        return (
+            "deteccion_marcadores.tolerancia_tamano = {} tiene que estar en (0, 1): es una "
+            "FRACCIÓN del tamaño esperado. Con 0 no entraría ningún marcador —ni el real, que "
+            "nunca mide exacto— y con 1 entraría cualquier cosa de la mitad al doble".format(tol)
+        )
+    if cfg.deteccion_marcadores.margen_fuera_de_cancha_celdas < 0:
+        return (
+            "deteccion_marcadores.margen_fuera_de_cancha_celdas no puede ser negativo: "
+            "sería exigir que los marcadores caigan MÁS ADENTRO que la cancha, y el "
+            "paralaje empuja justo para el otro lado"
         )
     margen = cfg.deteccion_marcadores.margen_decision_duplicados
     if not (0.0 < margen < 1.0):

@@ -49,7 +49,7 @@ Los marcadores legítimos son el control
 ---------------------------------------
 Los cuatro de esquina y el del rover se miden también, y con la misma vara: sin
 saber cuánto se desvía un marcador legítimo no hay forma de elegir una
-tolerancia para rechazar a los falsos. El del rover está a 90 mm de altura, así
+tolerancia para rechazar a los falsos. El del rover está a 80 mm de altura, así
 que el paralaje lo infla `H/(H−h)`; la herramienta calcula ese factor con la
 pose de cámara —deducida de los cuatro marcadores, sin declarar nada— y lo
 informa.
@@ -58,7 +58,10 @@ informa.
 from __future__ import annotations
 
 import argparse
+import datetime
+import json
 import math
+import os
 import sys
 import time
 
@@ -262,6 +265,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--camara", default=None, help="nombre del perfil de calibración")
     parser.add_argument("--sintetico", action="store_true",
                         help="correr sobre imágenes generadas (para probar la herramienta)")
+    parser.add_argument("--guardar", action="store_true",
+                        help="guardar TODAS las detecciones crudas en vision/mediciones/")
+    parser.add_argument("--nota", default="",
+                        help="qué escena se midió, para que la sesión guardada se entienda sola")
     args = parser.parse_args(argv)
 
     cfg = cargar_config(args.config) if args.config else cargar_config()
@@ -289,6 +296,11 @@ def main(argv: list[str] | None = None) -> int:
     rovers: dict[int, Registro] = {}
     falsos: dict[int, Registro] = {}
     duplicados: dict[int, int] = {}
+    #: Cada detección, tal cual se midió. Se guarda aparte de los resúmenes
+    #: porque un promedio no se puede volver a analizar: si mañana aparece otra
+    #: pregunta —adentro o afuera de la cancha, agrupada o repartida— hay que
+    #: poder responderla sobre los mismos datos sin volver a montar la escena.
+    crudos_medidos: list[dict] = []
     cuadros = sin_geometria = cuadros_con_duplicado = ambiguos = 0
     factores = []
 
@@ -351,6 +363,16 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     destino = falsos
                 destino.setdefault(id_aruco, Registro(id_aruco)).registrar(cuadros, medida)
+                crudos_medidos.append({
+                    "cuadro": cuadros,
+                    "id": int(id_aruco),
+                    "grupo": ("esquina" if destino is control else
+                              "rover" if destino is rovers else "falso"),
+                    "col": round(medida["col"], 4),
+                    "row": round(medida["row"], 4),
+                    "lado_mm": round(medida["lado_mm"], 3),
+                    "cuadratura_pct": round(medida["cuadratura_pct"], 3),
+                })
 
             if time.monotonic() >= proximo_aviso:
                 proximo_aviso += 15.0
@@ -364,9 +386,53 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         fuente.cerrar()
 
-    informe(cfg, time.monotonic() - inicio, cuadros, sin_geometria, control, rovers,
+    duracion = time.monotonic() - inicio
+    informe(cfg, duracion, cuadros, sin_geometria, control, rovers,
             falsos, duplicados, cuadros_con_duplicado, ambiguos, ids_rover, factores)
+    if args.guardar:
+        guardar_sesion(cfg, args, duracion, cuadros, sin_geometria, factores, crudos_medidos)
     return 0
+
+
+def guardar_sesion(cfg, args, duracion, cuadros, sin_geometria, factores, crudos) -> None:
+    """Guarda la sesión cruda, no el resumen.
+
+    Un promedio no se puede volver a analizar. Si mañana hay otra pregunta
+    —¿caían dentro de la cancha?, ¿se agrupaban?, ¿cambió el tamaño con la
+    posición?— hay que poder contestarla sobre los mismos datos, sin volver a
+    montar la escena ni a esperar a que el detector tenga ganas de equivocarse.
+
+    Va en `vision/mediciones/`, con las otras: es el resultado de medir un
+    aparato concreto en una cancha concreta, no configuración del sistema.
+    """
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    carpeta = os.path.join(base, cfg.precision.carpeta_mediciones)
+    os.makedirs(carpeta, exist_ok=True)
+    sello = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    ruta = os.path.join(carpeta, "falsos_positivos_{}.json".format(sello))
+
+    datos = {
+        "cuando": datetime.datetime.now().isoformat(timespec="seconds"),
+        "nota": args.nota,
+        "sintetico": bool(args.sintetico),
+        "duracion_s": round(duracion, 1),
+        "cuadros": cuadros,
+        "cuadros_sin_geometria": sin_geometria,
+        "diccionario": cfg.marcadores_esquina.nombre_diccionario,
+        "cancha": {"cols": cfg.tablero.cols, "rows": cfg.tablero.rows,
+                   "cell_mm": cfg.tablero.cell_mm},
+        "esperado_mm": {
+            "esquina": cfg.marcadores_esquina.lado_mm,
+            "rover_nominal": cfg.elementos.marcador_rover.lado_mm,
+            "factor_paralaje_mediano": round(float(np.median(factores)), 4) if factores else None,
+        },
+        "detecciones": crudos,
+    }
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(datos, f, indent=1, ensure_ascii=False)
+    print("\n  Sesión cruda guardada en: {}".format(ruta))
+    print("  {} detecciones, con su cuadro, ID, grupo, celda, lado y cuadratura.".format(
+        len(crudos)))
 
 
 def informe(cfg, duracion, cuadros, sin_geometria, control, rovers, falsos,
@@ -455,6 +521,28 @@ def informe(cfg, duracion, cuadros, sin_geometria, control, rovers, falsos,
         cerca = int(np.sum(np.abs(lados - lado) <= BANDA_REPORTE * lado))
         print("  a menos de {:.0f} % del lado de un marcador de {} ({:.1f} mm): {} de {}".format(
             BANDA_REPORTE * 100, nombre, lado, cerca, len(lados)))
+
+    # ¿Caen DENTRO de la cancha o en el borde muerto? Importa porque un filtro
+    # por posición —rechazar lo que caiga fuera de la cancha efectiva— mata sin
+    # ningún falso negativo posible a todo lo que esté afuera: ahí no puede
+    # haber un marcador legítimo, por definición.
+    cols, rows = cfg.tablero.cols, cfg.tablero.rows
+    adentro = fuera = 0
+    fuera_por_id: dict[int, int] = {}
+    for r in falsos.values():
+        for col, row in r.celdas:
+            if 0.0 <= col <= cols and 0.0 <= row <= rows:
+                adentro += 1
+            else:
+                fuera += 1
+                fuera_por_id[r.id] = fuera_por_id.get(r.id, 0) + 1
+    print("\n  DENTRO O FUERA de la cancha de {}x{} celdas".format(cols, rows))
+    print("  dentro: {} de {} ({:.0f} %)   ·   fuera, en el borde muerto: {} ({:.0f} %)".format(
+        adentro, adentro + fuera, 100.0 * adentro / max(1, adentro + fuera),
+        fuera, 100.0 * fuera / max(1, adentro + fuera)))
+    if fuera_por_id:
+        print("  los de afuera, por ID: {}".format(
+            ", ".join("{}: {}".format(i, n) for i, n in sorted(fuera_por_id.items()))))
 
     print("\n  CUADRATURA de los falsos positivos: mín/mediana/máx = {} %".format(
         _resumen(todas_cuad)))

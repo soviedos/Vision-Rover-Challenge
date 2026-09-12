@@ -49,7 +49,7 @@ try:  # como paquete
     from .detectors.rovers import detectar_rovers
     from .geometry.coordenadas import (
         AnclajeCancha, ErrorDuplicado, ErrorGeometria, detectar_marcadores_crudo,
-        pose_camara, resolver_duplicados,
+        filtrar_plausibles, pose_camara, resolver_duplicados,
     )
     from .geometry.distorsion import (
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
@@ -70,7 +70,7 @@ except ImportError:  # como script suelto
     from vision.detectors.rovers import detectar_rovers  # type: ignore[no-redef]
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
         AnclajeCancha, ErrorDuplicado, ErrorGeometria, detectar_marcadores_crudo,
-        pose_camara, resolver_duplicados,
+        filtrar_plausibles, pose_camara, resolver_duplicados,
     )
     from vision.geometry.distorsion import (  # type: ignore[no-redef]
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
@@ -168,7 +168,8 @@ def abrir_fuente(cfg: ConfigVision, args):
     return fuente, "cámara {} ({}x{})".format(perfil.camara, ancho, alto)
 
 
-def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, duplicados):
+def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, duplicados,
+             rechazos):
     """De un cuadro al estado del mundo. Lanza si la geometría no se puede armar.
 
     Una sola pasada del detector de ArUco por cuadro: el mismo resultado sirve
@@ -186,6 +187,11 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, d
     no-evento, son fantasmas que estuvieron a punto de pisar un marcador de
     verdad, y su cuenta es la que dice si el problema se agrava.
 
+    `rechazos` acumula los marcadores que el filtro de plausibilidad descartó
+    por tamaño o por posición. Se cuentan y se informan por el mismo motivo:
+    un filtro mudo que empieza a rechazar marcadores de verdad es
+    indistinguible de una cámara que dejó de verlos.
+
     Devuelve `(sistema de coordenadas, estado del mundo)`. El sistema se devuelve
     porque la vista lo necesita para dibujar celdas sobre la imagen; el estado es
     lo único que cruza hacia los consumidores.
@@ -200,7 +206,7 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, d
     """
     crudos = detectar_marcadores_crudo(
         cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario)
-    # Lo que se espera del marcador de un rover no es una constante: está a 90 mm
+    # Lo que se espera del marcador de un rover no es una constante: está a 80 mm
     # del tablero, así que se ve más grande Y corrido hacia afuera. Las dos cosas
     # salen de la pose deducida de la geometría GUARDADA —la de este cuadro
     # todavía no existe, y justamente uno de los candidatos en disputa podría ser
@@ -211,6 +217,15 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, d
             pose_guardada = pose_camara(anclaje.sistema, matriz_camara)
         except ErrorGeometria:
             pose_guardada = None
+    # Primero se descarta lo que NO PUEDE SER un marcador de esta cancha, y
+    # recién después se resuelven los duplicados. El orden importa: un fantasma
+    # que cae por tamaño deja de disputar el ID, así que el duplicado desaparece
+    # en vez de tener que resolverse. Medido en la cancha: trece disputas por
+    # minuto que dejan de existir.
+    crudos, descartes = filtrar_plausibles(
+        crudos, cfg, anclaje.sistema, pose_rover=pose_guardada)
+    rechazos.extend(descartes)
+
     detectados, repetidos = resolver_duplicados(
         crudos, cfg, anclaje.sistema, seguidor.ultimas_poses_rover(),
         pose_rover=pose_guardada)
@@ -283,7 +298,8 @@ def main(argv: list[str] | None = None) -> int:
     anclaje = AnclajeCancha(cfg)
     descartados: set[int] = set()
     duplicados: list = []
-    duplicados_totales = ambiguos = 0
+    rechazos: list = []
+    duplicados_totales = ambiguos = rechazos_totales = 0
     vista = None
     if args.ventana:
         # La vista es un CONSUMIDOR: solo lee. Si se apaga, el sistema sigue
@@ -346,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 sistema_actual, estado = procesar(
                     cuadro, cfg, matriz, arbitro.fase, seguidor, anclaje, descartados,
-                    duplicados)
+                    duplicados, rechazos)
                 publicador.actualizar(estado)
                 ultimo_estado = estado
                 # El conteo va DESPUÉS de publicar y en su propio try: es para
@@ -393,15 +409,31 @@ def main(argv: list[str] | None = None) -> int:
                 edad = publicador.edad_del_estado_ms()
                 print("[estado] fase={} cuadros={} fallos={} emitidos={} clientes={} "
                       "pisados={} fps={:.1f} edad={} conservados={}/{} acopio={} "
-                      "duplicados={}".format(
+                      "duplicados={} rechazados={}".format(
                           arbitro.fase, cuadros, fallos, publicador.emitidos,
                           publicador.clientes, publicador.pisados, fuente.fps_real,
                           "{} ms".format(edad) if edad is not None else "sin estado",
                           seguidor.conservados_rover, seguidor.conservados_cubo,
                           "{}/{}".format(acopio.en_posicion, acopio.total)
                           if acopio is not None else "sin datos",
-                          duplicados_totales + len(duplicados)),
+                          duplicados_totales + len(duplicados),
+                          rechazos_totales + len(rechazos)),
                       flush=True)
+                if rechazos:
+                    rechazos_totales += len(rechazos)
+                    por_motivo: dict[str, int] = {}
+                    for r in rechazos:
+                        por_motivo[r.motivo] = por_motivo.get(r.motivo, 0) + 1
+                    ultimo = rechazos[-1]
+                    print("[aviso] marcadores rechazados por no ser plausibles: {}. No pueden "
+                          "ser marcadores de esta cancha: el detector los inventa sobre la "
+                          "cuadrícula del tablero. Ejemplo: ID {} rechazado por {}, midió "
+                          "{:.1f} mm donde se esperaban {:.1f}, en la celda ({:.1f}, {:.1f})".format(
+                              ", ".join("{} por {}".format(n, m) for m, n in sorted(
+                                  por_motivo.items())),
+                              ultimo.id, ultimo.motivo, ultimo.lado_mm, ultimo.esperado_mm,
+                              ultimo.col, ultimo.row), flush=True)
+                    rechazos.clear()
                 if duplicados or ambiguos:
                     duplicados_totales += len(duplicados)
                     porid: dict[int, int] = {}

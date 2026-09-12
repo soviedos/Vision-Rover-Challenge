@@ -20,7 +20,7 @@ Aplica la regla de entrega del reglamento: un cubo está entregado cuando queda
 |---|---|
 | Evaluar cada cubo contra su zona | **Dibujar** — eso es de [`../vista.py`](../vista.py) |
 | Llevar la memoria entre cuadros | **Publicar** — el conteo no viaja en el mensaje |
-| Exponer la cuenta y el detalle por color | **Cambiar la fase** — la ronda la cierra una persona |
+| Exponer la cuenta y el detalle por color | **Cerrar la ronda** — eso lo decide el árbitro, que es quien lleva el cronómetro |
 
 ## El veredicto no se calcula acá
 
@@ -87,10 +87,21 @@ El antirrebote se verifica aparte, con estados escritos a mano: un cubo que
 entra y no se sostiene no cuenta, uno que se sostiene cuenta, uno que sale
 descuenta de inmediato, y uno tapado sigue contando con su edad creciendo.
 
-## La visión informa, no arbitra
+## Este paquete cuenta; el árbitro decide
 
-Cuando los tres cubos están en posición, la imagen lo anuncia. **La fase no
-cambia sola**: la ronda la sigue cerrando una persona con `stop`, de acuerdo con
-la señal del juez. Es la misma frontera que rige en todo el sistema —la visión
-dice lo que ve, los demás deciden— y por eso el conteo tampoco viaja en el
-mensaje.
+Cuando todos los cubos en juego están en posición, la imagen lo anuncia y el
+contador **se lo informa al árbitro**, que cierra la ronda con motivo
+`reto_cumplido`. La frontera no desapareció: se movió. Acá se cuenta y se dice
+**desde cuándo**; quién termina la ronda es una sola voz, la de
+[`../sistema.py`](../sistema.py), que es la que lleva el cronómetro.
+
+Lo que se le informa es el instante de la **entrada** del último cubo, no el del
+cumplimiento de la permanencia mínima. El contador exige un segundo sostenido
+para no titilar, y cobrárselo a todos los equipos sería descalibrar el reloj.
+
+Dos cosas que el árbitro **no** da por cumplidas aunque la cuenta esté completa:
+si en ese instante no se ven las coordenadas —no se certifica lo que no se está
+viendo— y si el reto nunca se vio incompleto durante la ronda, que es el caso de
+una cancha que quedó armada de la vuelta anterior.
+
+El conteo tampoco viaja en el mensaje: es para la pantalla y para el acta.

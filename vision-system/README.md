@@ -48,9 +48,12 @@ El sistema hace tres cosas:
 
 Además, el sistema publica la **fase oficial de la ronda** para que todos los
 rovers reciban una referencia común (`IDLE`, `READY`, `RUNNING`, `FINISHED`).
-La transición entre fases es operada por la organización de acuerdo con las
-indicaciones del juez; el sistema de visión distribuye ese estado de manera
-consistente a todos los equipos.
+**La visión es el árbitro de la ronda**: lleva el cronómetro oficial, pasa de
+`READY` a `RUNNING` sola al agotarse la preparación —sin que nadie apriete
+nada, para que todos los equipos preparen con el mismo tiempo— y cierra la
+ronda sola, por tiempo agotado, por reto cumplido o por haber perdido de vista
+la cancha. Una persona prepara (`ready`), puede cerrarla antes (`stop`) o
+abortar la preparación (`abort`); arrancarla no.
 
 ### Lo que este proyecto NO hace
 
@@ -549,10 +552,17 @@ arrastrar 44 MB de OpenCV ni la mitad del sistema de visión.
 
 La visión publica un campo de **fase**: `IDLE`, `READY`, `RUNNING`, `FINISHED`.
 
-Todos los equipos necesitan una referencia común sobre el estado de la ronda. La
-autoridad de inicio y finalización corresponde a la **organización y al juez**;
-el sistema de visión convierte esa decisión operativa en un estado técnico único
-y lo publica a todos los rovers.
+Todos los equipos necesitan una referencia común sobre el estado de la ronda, y
+esa referencia tiene que ser **una sola voz**. La visión es esa voz: además de
+publicar la fase, **la decide**. Lleva el cronómetro oficial —con reloj
+monótono, para que un ajuste de hora del sistema no altere un tiempo de
+competencia—, arranca la ronda sola al agotarse la preparación y la cierra sola
+al agotarse el tiempo, al quedar todos los cubos en posición, o al perder de
+vista la cancha más de un par de segundos.
+
+El campo `clock` viaja en cada mensaje para que cualquiera pueda saber en qué
+punto está la ronda con **un solo mensaje y sin memoria**: un robot que llevara
+su propio reloj se desviaría del oficial.
 
 De esta manera, todos reciben la misma información de fase sin que cada equipo
 tenga que inferir por su cuenta si la ronda comenzó o terminó.
@@ -694,8 +704,8 @@ Otras formas de arrancarlo:
 Al arrancar pregunta **qué cámara** usar y qué perfil de calibración, y después
 queda corriendo. Mientras corre, el operador de la infraestructura oficial puede
 escribir por teclado `ready`, `stop`, `abort`, `quit`. Estos comandos cambian la
-fase publicada por el sistema de visión y deben utilizarse de acuerdo con la
-señal del juez y la operación de la competencia.
+fase de la ronda. Las otras dos transiciones —el arranque y el cierre por tiempo
+o por reto cumplido— **las hace el reloj del sistema**, no una persona.
 
 No son comandos disponibles para los equipos ni mecanismos de control de los
 rovers.
@@ -833,7 +843,7 @@ va engrosando. Así siempre hay algo que funciona y se puede verificar.
 | Pieza | Qué hace |
 |---|---|
 | **El contrato** (`contrato/`) | Formato definido, validador, simulador con patologías reales, cliente de referencia y manual completo. Protocolo **v2**: zonas de acopio rectangulares, salida al centro del lado, y la geometría del acopio compartida con los equipos. |
-| **La regla de acopio** (`vision/reglas/`) | Cuenta los cubos completamente dentro de su zona, con permanencia mínima para que el número no titile. El veredicto sale del contrato, así que la pantalla y el rover dicen lo mismo. No se publica ni cambia la fase. |
+| **La regla de acopio** (`vision/reglas/`) | Cuenta los cubos completamente dentro de su zona, con permanencia mínima para que el número no titile. El veredicto sale del contrato, así que la pantalla y el rover dicen lo mismo. El conteo **no se publica**, pero cuando están todos, el contador se lo informa al árbitro y **la ronda se cierra sola** con motivo `reto_cumplido`. |
 | **Generador sintético** (`vision/sources/`) | Crea imágenes del tablero con marcadores y rovers, **conociendo la verdad** de lo que dibujó. |
 | **Captura real** (`vision/sources/`) | Lee la webcam USB en un hilo propio que **nunca bloquea**, con exposición, enfoque y balance de blancos fijos —y **verificados por efecto**, porque muchas cámaras aceptan el ajuste y siguen haciendo lo que quieren—. Incluye un menú para elegir qué cámara abrir. |
 | **Geometría de esquinas** (`vision/geometry/`) | Detecta los 4 marcadores y convierte píxeles a celdas. Verificado contra la verdad del generador sintético, con los marcadores de **100 mm** reales: **exacto** con la cámara cenital y **0,44 mm** de error máximo con la cámara inclinada. El centro de cada marcador sale de **cruzar sus diagonales** y no de promediar sus esquinas (ver más abajo). |

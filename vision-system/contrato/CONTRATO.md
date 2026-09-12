@@ -536,7 +536,7 @@ FINISHED ──ready──▶ READY        FINISHED ──abort──▶ IDLE
   Es lo que hace que todos los equipos preparen con el mismo tiempo. No existe
   ningún comando que salte la preparación.
 - **`RUNNING → FINISHED` también puede hacerla el reloj**, de dos maneras: se
-  agota el tiempo, o **los tres cubos quedan en posición**. En el segundo caso el
+  agota el tiempo, o **todos los cubos en juego quedan en posición**. En el segundo caso el
   cronómetro se detiene con el tiempo que tomó el reto.
 - Las demás las hace una persona operando el sistema.
 

@@ -198,7 +198,7 @@ El diagrama muestra el recorrido completo, y **está construido entero**:
 |---|---|---|
 | ① captura · ② rectificación | ✅ | — |
 | ③ píxeles→celdas | ✅ | 0,52 mm |
-| ③b pose de cámara · ③c paralaje | ✅ | 41 mm → **0,9 mm** |
+| ③b pose de cámara · ③c paralaje | ✅ | 27 mm → **1,0 mm** |
 | ④ detectores — **rovers** | ✅ | 1,03 mm · 1,2° |
 | ④ detectores — **cubos** | ✅ | 1,05 mm (4,88 mm empujado) |
 | ⑤ seguimiento · ⑥ estado del mundo · ⑦ publicación | ✅ | — |
@@ -839,7 +839,7 @@ va engrosando. Así siempre hay algo que funciona y se puede verificar.
 | **Perfiles por cámara** (`vision/geometry/`) | Cada aparato guarda su propia calibración, y el sistema **avisa cuando el perfil no le corresponde** a la cámara conectada, en vez de corregir mal en silencio. |
 | **Detección de rovers** (`vision/detectors/`) | Encuentra los rovers por su marcador y deduce su **celda y su ángulo**, calculados en celdas y no en píxeles porque la perspectiva no conserva los ángulos. Verificado contra la verdad del generador: **0,8 mm** de error de posición y **1,3°** de orientación con la cámara inclinada, sobre 36 rovers repartidos. |
 | **Detección de cubos** (`vision/detectors/`) | Encuentra los cubos por color —croma en Lab para separar, matiz para clasificar— y los ubica por su **base**, ajustando el modelo del cubo al contorno visible. **1,05 mm** con el cubo despejado y **4,88 mm** con un rover empujándolo y tapándole el 22 %. |
-| **Pose de cámara y paralaje** (`vision/geometry/`) | La pose sale de los mismos cuatro marcadores, sin declarar nada. Con ella, el corrimiento del marcador del rover baja de **41 mm a 0,9 mm**. |
+| **Pose de cámara y paralaje** (`vision/geometry/`) | La pose sale de los mismos cuatro marcadores, sin declarar nada. Con ella, el corrimiento del marcador del rover baja de **27 mm a 1,0 mm**. |
 | **Seguimiento** (`vision/tracking/`) | Memoria entre cuadros: un objeto tapado conserva su posición y su edad crece, en vez de desaparecer. Acá **no hay problema de asociación**, porque cada objeto trae su identidad. |
 | **Publicación** (`vision/publish/`) | TCP/NDJSON en el 2026, con reloj propio y último-valor-gana. El transporte lo comparte con el simulador. |
 | **El sistema completo** (`vision/sistema.py`) | El programa que se enciende: elige la fuente, corre el bucle, falla abierto y arbitra las fases. |

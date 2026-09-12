@@ -99,7 +99,7 @@ inclinada, y contra un criterio de aceptación de **10 mm**:
 | Etapa | Error |
 |---|---|
 | Píxeles → celdas | 0,52 mm |
-| Paralaje del rover | 41 mm sin corregir → **0,9 mm** corregido |
+| Paralaje del rover | 27 mm sin corregir → **1,0 mm** corregido |
 | Rovers | 1,03 mm · 1,2° |
 | Cubos | 1,05 mm · **4,88 mm** con un rover empujándolos |
 

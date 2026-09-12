@@ -53,15 +53,15 @@ en todo el sistema.
 
 #### El paralaje no afecta la orientación
 
-El marcador del rover está a 90 mm sobre el tablero, así que no está en el plano
+El marcador del rover está a 80 mm sobre el tablero, así que no está en el plano
 que define la homografía y aparece **corrido hacia afuera**. Pero como su plano
 es **paralelo** al del tablero, esa deformación es una homotecia —un
 agrandamiento alrededor del punto que está bajo la cámara— y una homotecia
 **conserva las direcciones**.
 
 Consecuencia práctica, ya medida: la corrección de paralaje —que **ya existe**,
-en [`../geometry/`](../geometry/README.md)— baja el error de posición de 41 mm a
-0,9 mm y **deja la orientación igual**. Se le pasa a `detectar_rovers` como
+en [`../geometry/`](../geometry/README.md)— baja el error de posición de 27 mm a
+1,0 mm y **deja la orientación igual**. Se le pasa a `detectar_rovers` como
 `pose_de_camara`.
 
 Es opcional a propósito, y no un descuido: hay un caso legítimo sin pose —

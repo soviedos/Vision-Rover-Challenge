@@ -296,7 +296,7 @@ la respuesta.
 
 #### El paralaje infla el módulo un 4,5 %
 
-El marcador está a 90 mm del tablero, así que se ve corrido hacia afuera.
+El marcador está a 80 mm del tablero, así que se ve corrido hacia afuera.
 Mientras el robot gira en el lugar, ese efecto es una **homotecia** alrededor del
 punto bajo la cámara: **conserva la dirección y escala el módulo** por
 `H/(H−h)` = 1,045 con la cámara a 2,1 m.
@@ -414,7 +414,7 @@ elegir la tolerancia con la que rechazar a los falsos.
 El informe final da la tasa por minuto —en detecciones y en apariciones
 distintas—, qué IDs aparecieron, la distribución de tamaños y cuántos de esos
 tamaños caen cerca de un marcador real. También informa **cuánto infla el
-paralaje** al marcador del rover, que está a 90 mm de altura y por eso se mide
+paralaje** al marcador del rover, que está a 80 mm de altura y por eso se mide
 más grande de lo que es: quien fije una tolerancia de tamaño tiene que
 contemplarlo.
 

@@ -209,8 +209,8 @@ sistema sigue con precisión completa en vez de quedarse ciego.
 
 Los objetos **altos** no se ven donde están: se ven corridos **hacia afuera**,
 alejándose del punto que está justo debajo de la cámara. El marcador del rover
-está a 90 mm del tablero, y eso son hasta **41 mm** de error con la cámara
-inclinada, contra un criterio de aceptación de 10.
+está a 80 mm del tablero —confirmados con calibre—, y eso son hasta **27 mm** de
+error con la cámara inclinada, contra un criterio de aceptación de 10.
 
 Los cuatro marcadores de esquina **no pueden corregirlo por sí solos**: están al
 ras del tablero, así que no contienen ninguna información sobre cuánto se

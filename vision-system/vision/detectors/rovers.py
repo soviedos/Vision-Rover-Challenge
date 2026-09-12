@@ -43,14 +43,15 @@ a celdas **primero**, y todo lo demás se calcula ahí.
 
 El paralaje mueve la posición y no toca la orientación
 ------------------------------------------------------
-El marcador del rover está a 90 mm sobre el tablero, así que no está en el plano
+El marcador del rover está a 80 mm sobre el tablero, así que no está en el plano
 que define la homografía y aparece corrido hacia afuera. Pero como el plano del
 marcador es **paralelo** al tablero, esa deformación es una homotecia —un
 agrandamiento alrededor del punto que está bajo la cámara—, y una homotecia
 **conserva las direcciones**.
 
-Consecuencia práctica, medida: la corrección de paralaje mueve la **posición**
-—de hasta 41 mm a menos de 1— y deja la **orientación** igual.
+Consecuencia práctica, medida con la altura confirmada con calibre de 80 mm: la
+corrección de paralaje mueve la **posición** —de hasta 27 mm a ~1— y deja la
+**orientación** igual.
 
 La corrección se aplica pasándole `pose_de_camara` a `detectar_rovers`. Esa pose
 se deduce de los mismos cuatro marcadores de esquina: nadie declara la altura ni
@@ -250,8 +251,8 @@ def detectar_rovers(
     para armar las coordenadas y para encontrar los rovers.
 
     `pose_de_camara` habilita la **corrección de paralaje**. El marcador está a
-    90 mm sobre el tablero, así que no está en el plano que define la homografía
-    y se ve corrido hacia afuera: hasta 41 mm con la cámara inclinada, contra un
+    80 mm sobre el tablero, así que no está en el plano que define la homografía
+    y se ve corrido hacia afuera: hasta 27 mm con la cámara inclinada, contra un
     criterio de aceptación de 10. Con la pose —que se deduce de los mismos
     cuatro marcadores de esquina, sin declarar nada— el corrimiento baja a menos
     de 1 mm.

@@ -552,7 +552,7 @@ def _dibujar_marcador(
 
     Primero se calcula el cuadrado en **celdas** —el mundo— y recién después se
     lo proyecta con la cámara. Ese orden es el que hace que el paralaje aparezca
-    solo: un marcador a 90 mm se proyecta en otro lado que el mismo marcador al
+    solo: un marcador a 80 mm se proyecta en otro lado que el mismo marcador al
     ras, sin que haya que programar ninguna corrección.
     """
     # El cuadrilátero que se estampa incluye la zona blanca; el que se guarda

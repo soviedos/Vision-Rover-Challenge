@@ -83,6 +83,12 @@
     "_nota_empuje": "Si un rover pasa a menos de radio_empuje_celdas de un cubo, lo empuja en la dirección en la que va. Sirve para que los equipos vean cubos que se mueven solos."
   },
 
+  "ronda": {
+    "_acerca_de": "Los dos tiempos de una ronda, en milisegundos. Tienen que ser los mismos que los de vision/config_vision.json: los equipos desarrollan contra el simulador para correr contra la cancha, y dos cronómetros distintos harían que la preparación que ensayaron no sea la que van a tener.",
+    "preparacion_ms": 60000,
+    "duracion_ms": 600000,
+    "_COMO_SE_PRUEBA_SIN_ESPERAR": "Bajá los dos valores acá. No hay comando que adelante el paso de READY a RUNNING —se quitó a propósito— así que esta es la forma de probar el ciclo completo en veinte segundos en vez de en once minutos."
+  },
   "semilla_aleatoria": 20260725,
   "_nota_semilla": "Semilla fija para que dos corridas den lo mismo y un bug del equipo sea reproducible. Poner null para tener ruido distinto en cada corrida."
 }

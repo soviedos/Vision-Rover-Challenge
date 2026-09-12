@@ -211,6 +211,19 @@ class Arbitro:
         with self._lock:
             return self._reloj_actual()
 
+    def instantanea(self) -> tuple[str, RelojRonda]:
+        """La fase y el cronómetro **del mismo instante**, bajo un solo candado.
+
+        Pedirlos por separado dejaría que un `tictac` se cuele entre las dos
+        llamadas, y entonces un mensaje diría una fase y un cronómetro de
+        momentos distintos: el peor caso es publicar `RUNNING` con el reloj de
+        la preparación todavía puesto. Duraría un cuadro y sería casi imposible
+        de reproducir, que es exactamente el tipo de error que no hay que dejar
+        que exista.
+        """
+        with self._lock:
+            return self._fase, self._reloj_actual()
+
     # -- escritura --------------------------------------------------------
 
     def intentar(self, comando: str) -> str:
@@ -288,7 +301,15 @@ class Arbitro:
             self._vio_incompleto = False
 
     def _cerrar(self, motivo: str, instante: float | None = None) -> None:
-        transcurrido = self._transcurrido_ms(instante)
+        # Se recorta al total, y no es un detalle cosmético. `tictac` se entera
+        # en el cuadro SIGUIENTE al vencimiento, así que el transcurrido real de
+        # una ronda agotada siempre se pasa unos milisegundos: medido en el
+        # simulador, 5019 sobre 5000. Esos 19 ms son latencia del bucle, no
+        # tiempo de competencia, y sin recortar rompen el invariante que el
+        # contrato valida —transcurrido + restante = total—, que fue justamente
+        # quien lo delató. Cerrando antes del vencimiento el recorte no hace
+        # nada, que es lo que corresponde.
+        transcurrido = min(self._transcurrido_ms(instante), self._total_ms)
         self._fase = "FINISHED"
         self._final_ms = transcurrido
         self._motivo = motivo
@@ -342,7 +363,7 @@ def abrir_fuente(cfg: ConfigVision, args):
     return fuente, "cámara {} ({}x{})".format(perfil.camara, ancho, alto)
 
 
-def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, duplicados,
+def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descartados, duplicados,
              rechazos, admision, demorados):
     """De un cuadro al estado del mundo. Lanza si la geometría no se puede armar.
 
@@ -432,6 +453,7 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, d
     return sistema, seguidor.actualizar(
         ts_ms=cuadro.ts_ms,
         fase=fase,
+        reloj=reloj,
         rovers=detectar_rovers(detectados, sistema, cfg, pose),
         cubos=detectar_cubos(cuadro.imagen, sistema, cfg, pose),
     )
@@ -562,9 +584,10 @@ def main(argv: list[str] | None = None) -> int:
             # sigue. La publicación continúa emitiendo el último estado bueno,
             # que envejece a la vista de todos. El sistema no se calla nunca.
             try:
+                fase_ahora, reloj_ahora = arbitro.instantanea()
                 sistema_actual, estado = procesar(
-                    cuadro, cfg, matriz, arbitro.fase, seguidor, anclaje, descartados,
-                    duplicados, rechazos, admision, demorados)
+                    cuadro, cfg, matriz, fase_ahora, reloj_ahora, seguidor, anclaje,
+                    descartados, duplicados, rechazos, admision, demorados)
                 publicador.actualizar(estado)
                 ultimo_estado = estado
                 # El conteo va DESPUÉS de publicar y en su propio try: es para

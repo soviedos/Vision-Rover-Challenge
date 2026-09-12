@@ -136,6 +136,9 @@ class EstadoMundo:
 
     ts_ms: int
     fase: str
+    #: El cronómetro oficial en este instante. Viaja acá adentro y no se le
+    #: pregunta al árbitro desde el publicador: el estado es lo único que cruza.
+    reloj: RelojRonda = RelojRonda()
     rovers: tuple[RoverEnMundo, ...] = ()
     cubos: tuple[CuboEnMundo, ...] = ()
 
@@ -176,6 +179,11 @@ def a_mensaje(estado: EstadoMundo, cfg: ConfigVision, seq: int) -> schema.Mensaj
         depot_size=schema.DepotSize(length=tamano.largo_mm / cell_mm,
                                     depth=tamano.fondo_mm / cell_mm),
         cube_side=cfg.elementos.cubos.lado_mm / cell_mm,
+        clock=schema.Clock(
+            elapsed_ms=estado.reloj.transcurrido_ms,
+            remaining_ms=estado.reloj.restante_ms,
+            total_ms=estado.reloj.total_ms,
+        ),
         depots=tuple(
             schema.Depot(color=d.color, col=d.col, row=d.row) for d in cfg.lugares.depositos
         ),

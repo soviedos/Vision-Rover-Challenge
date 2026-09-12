@@ -58,6 +58,7 @@ try:  # como paquete: python -m contrato.mock_publisher
         FASE_READY,
         FASE_RUNNING,
         PROTOCOL_VERSION,
+        Clock,
         Cube,
         Depot,
         DepotSize,
@@ -84,6 +85,7 @@ except ImportError:  # como script suelto: python contrato/mock_publisher.py
         FASE_READY,
         FASE_RUNNING,
         PROTOCOL_VERSION,
+        Clock,
         Cube,
         Depot,
         DepotSize,
@@ -121,6 +123,10 @@ class EstadoMundo:
 
     ts_ms: int
     phase: str
+    #: El cronómetro oficial, del mismo instante que `ts_ms`. Viaja con el
+    #: estado y no se arma en el publicador, por lo mismo que `ts_ms`: si se
+    #: recalculara al emitir, diría un momento distinto del que se observó.
+    clock: Clock
     rovers: tuple[Rover, ...]
     cubes: tuple[Cube, ...]
     obstacles: tuple[Obstacle, ...]
@@ -155,6 +161,8 @@ class Config:
     prob_perdida_rover: float
     radio_empuje: float
     semilla: int | None
+    preparacion_ms: int
+    duracion_ms: int
 
 
 def cargar_config(ruta: str) -> Config:
@@ -201,6 +209,8 @@ def cargar_config(ruta: str) -> Config:
         prob_perdida_rover=float(pat["prob_perdida_rover"]),
         radio_empuje=float(pat["radio_empuje_celdas"]),
         semilla=d.get("semilla_aleatoria"),
+        preparacion_ms=int(d["ronda"]["preparacion_ms"]),
+        duracion_ms=int(d["ronda"]["duracion_ms"]),
     )
 
 
@@ -249,6 +259,10 @@ def _revisar_zonas(cfg: Config) -> str | None:
                 cfg.depot_size.length, cfg.depot_size.depth,
                 DEPOT_LENGTH_CELLS, DEPOT_DEPTH_CELLS)
         )
+    if cfg.preparacion_ms <= 0:
+        return "config: ronda.preparacion_ms debe ser > 0"
+    if cfg.duracion_ms <= 0:
+        return "config: ronda.duracion_ms debe ser > 0"
     if cfg.cube_side <= 0:
         return "config: cube_side debe ser > 0"
     lado_contrato = CUBE_SIDE_MM / cfg.grid.cell_mm
@@ -376,11 +390,15 @@ class Simulador:
 
     # -- paso de simulación ------------------------------------------------
 
-    def paso(self, dt_s: float, phase: str) -> EstadoMundo:
+    def paso(self, dt_s: float, phase: str, clock: Clock) -> EstadoMundo:
         """Avanza el mundo `dt_s` segundos y devuelve la foto observada.
 
         Solo se mueve en `RUNNING`. En las otras fases el mundo queda quieto,
         pero se sigue observando y publicando: el sistema nunca deja de emitir.
+
+        La fase y el reloj llegan juntos desde `Fase.instantanea()`, del mismo
+        instante, y se guardan en el estado tal cual: recalcularlos al publicar
+        diría un momento distinto del que se observó.
         """
         t = ahora_ms()
 
@@ -392,7 +410,8 @@ class Simulador:
         obstacles = self._observar_obstacles()
 
         return EstadoMundo(
-            ts_ms=t, phase=phase, rovers=rovers, cubes=cubes, obstacles=obstacles
+            ts_ms=t, phase=phase, clock=clock,
+            rovers=rovers, cubes=cubes, obstacles=obstacles
         )
 
     def _mover_rovers(self, dt_s: float) -> None:
@@ -515,39 +534,123 @@ class Simulador:
 
 
 class Fase:
-    """Fase de la ronda, con las transiciones válidas.
+    """Fase de la ronda y su cronómetro. Espeja al árbitro del sistema real.
 
-    La visión es árbitro: la fase la decide ella y los equipos la obedecen. Acá
-    la decide el teclado, que hace de árbitro humano.
+    La visión es árbitro: lleva el reloj oficial, pasa de READY a RUNNING sola y
+    cierra la ronda al agotarse el tiempo. Acá se hace lo mismo, y no por
+    prolijidad: los equipos desarrollan contra el simulador para correr contra
+    la cancha, así que un simulador donde la ronda se maneja distinto les haría
+    ensayar un ciclo que no existe.
+
+    `start` no está, y su ausencia es la regla: el paso a RUNNING lo hace el
+    reloj. Para probar el ciclo completo sin esperar once minutos se bajan los
+    dos tiempos en `config_simulador.json`, que para eso están declarados.
+
+    Diferencia honesta con el sistema real: acá no hay cierre por **reto
+    cumplido**, porque el simulador no cuenta cubos en zona. Se cierra por
+    tiempo agotado o porque lo pide el operador.
+
+    El reloj es monótono, como el oficial: un ajuste de hora del sistema no
+    puede alterar un tiempo de ronda.
     """
 
     _TRANSICIONES = {
         "ready": ((FASE_IDLE, FASE_FINISHED), FASE_READY),
-        "start": ((FASE_READY,), FASE_RUNNING),
-        "stop": ((FASE_RUNNING, FASE_READY), FASE_FINISHED),
+        "stop": ((FASE_RUNNING,), FASE_FINISHED),
+        "abort": ((FASE_READY, FASE_FINISHED), FASE_IDLE),
     }
 
-    def __init__(self) -> None:
+    def __init__(self, cfg: Config) -> None:
+        self._cfg = cfg
         self._lock = threading.Lock()
         self._valor = FASE_IDLE
+        self._inicio: float | None = None
+        self._total_ms = 0
+        self._final_ms: int | None = None
 
     @property
     def valor(self) -> str:
         with self._lock:
             return self._valor
 
+    def instantanea(self) -> tuple[str, Clock]:
+        """La fase y el cronómetro del MISMO instante, bajo un solo candado.
+
+        Pedirlos por separado dejaría que una transición se cuele entre las dos
+        llamadas, y el mensaje diría una fase con el reloj de otra.
+        """
+        with self._lock:
+            return self._valor, self._clock()
+
+    def tictac(self) -> str | None:
+        """Deja que el reloj haga lo suyo. Devuelve el aviso, si hubo."""
+        with self._lock:
+            if self._inicio is None or self._final_ms is not None:
+                return None
+            if self._transcurrido_ms() < self._total_ms:
+                return None
+            if self._valor == FASE_READY:
+                self._entrar(FASE_RUNNING)
+                return "fase: READY -> RUNNING (se agotó la preparación)"
+            if self._valor == FASE_RUNNING:
+                self._cerrar()
+                return "fase: RUNNING -> FINISHED (se agotó el tiempo)"
+            return None
+
     def aplicar(self, comando: str) -> str:
         """Aplica un comando. Devuelve un texto para mostrarle al operador."""
         with self._lock:
+            if comando == "start":
+                return ("'start' ya no existe: de READY a RUNNING pasa el reloj, no una "
+                        "tecla. Para probar sin esperar, bajá ronda.preparacion_ms.")
             if comando not in self._TRANSICIONES:
-                return "comando desconocido: {!r} (usá ready, start, stop, quit)".format(comando)
+                return "comando desconocido: {!r} (usá ready, stop, abort, quit)".format(comando)
             desde, hacia = self._TRANSICIONES[comando]
             if self._valor not in desde:
                 return "'{}' no es válido desde {} (se puede desde {})".format(
                     comando, self._valor, list(desde)
                 )
-            anterior, self._valor = self._valor, hacia
-            return "fase: {} -> {}".format(anterior, self._valor)
+            anterior = self._valor
+            if hacia == FASE_FINISHED:
+                self._cerrar()
+            else:
+                self._entrar(hacia)
+            return "fase: {} -> {}".format(anterior, hacia)
+
+    # -- interno (siempre con el candado tomado) --------------------------
+
+    def _entrar(self, destino: str) -> None:
+        duraciones = {FASE_READY: self._cfg.preparacion_ms,
+                      FASE_RUNNING: self._cfg.duracion_ms}
+        self._valor = destino
+        self._total_ms = duraciones.get(destino, 0)
+        self._inicio = time.monotonic() if self._total_ms else None
+        self._final_ms = None
+
+    def _cerrar(self) -> None:
+        # Recortado al total: `tictac` se entera en el paso siguiente al
+        # vencimiento, así que el transcurrido real de una ronda agotada se pasa
+        # por unos milisegundos de latencia que no son tiempo de competencia.
+        # Sin recortar, el mensaje viola el invariante que el propio contrato
+        # valida: transcurrido + restante = total.
+        self._final_ms = min(self._transcurrido_ms(), self._total_ms)
+        self._valor = FASE_FINISHED
+
+    def _transcurrido_ms(self) -> int:
+        if self._inicio is None:
+            return 0
+        return max(0, int(round((time.monotonic() - self._inicio) * 1000.0)))
+
+    def _clock(self) -> Clock:
+        if self._final_ms is not None:
+            transcurrido = self._final_ms
+        elif self._inicio is None:
+            return Clock(elapsed_ms=0, remaining_ms=0, total_ms=0)
+        else:
+            transcurrido = min(self._transcurrido_ms(), self._total_ms)
+        return Clock(elapsed_ms=transcurrido,
+                     remaining_ms=max(0, self._total_ms - transcurrido),
+                     total_ms=self._total_ms)
 
 
 # --------------------------------------------------------------------------
@@ -583,7 +686,11 @@ def _hilo_simulacion(
         ahora = time.monotonic()
         dt_s, anterior = ahora - anterior, ahora
         try:
-            estado[0] = sim.paso(dt_s, fase.valor)
+            aviso = fase.tictac()
+            if aviso:
+                print("[fase] " + aviso)
+            valor, clock = fase.instantanea()
+            estado[0] = sim.paso(dt_s, valor, clock)
         except Exception as exc:  # noqa: BLE001 — fail-open a propósito
             print("[sim] error en el paso (se conserva el último estado): {}".format(exc))
 
@@ -618,6 +725,7 @@ def _hilo_publicacion(
                 start=cfg.start,
                 depot_size=cfg.depot_size,
                 cube_side=cfg.cube_side,
+                clock=mundo.clock,
                 depots=cfg.depots,
                 rovers=mundo.rovers,
                 cubes=mundo.cubes,
@@ -652,10 +760,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     sim = Simulador(cfg)
-    fase = Fase()
+    fase = Fase(cfg)
     pub = Publicador(cfg.host, cfg.port)
     salir = threading.Event()
-    estado: list[EstadoMundo | None] = [sim.paso(0.0, fase.valor)]
+    _valor_inicial, _clock_inicial = fase.instantanea()
+    estado: list[EstadoMundo | None] = [sim.paso(0.0, _valor_inicial, _clock_inicial)]
     contador = [0]
 
     pub.arrancar()
@@ -663,7 +772,9 @@ def main(argv: list[str] | None = None) -> int:
     print("Simulador del Vision-Rover-Challenge — protocolo v{}".format(PROTOCOL_VERSION))
     print("Publicando NDJSON en {}:{} a {:.0f} Hz".format(cfg.host, cfg.port, cfg.pub_hz))
     print("Cancha: {}x{} celdas de {:.0f} mm".format(cfg.grid.cols, cfg.grid.rows, cfg.grid.cell_mm))
-    print("Comandos: ready | start | stop | quit")
+    print("Preparación: {:.0f} s   ·   Ronda: {:.0f} s   (de READY a RUNNING pasa solo)".format(
+        cfg.preparacion_ms / 1000.0, cfg.duracion_ms / 1000.0))
+    print("Comandos: ready | stop | abort | quit")
     print("=" * 66)
 
     hilo_sim = threading.Thread(

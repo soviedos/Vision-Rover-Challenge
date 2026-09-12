@@ -127,11 +127,12 @@ LADO_IZQUIERDA = "izquierda"  # col = 0,    del marcador 3 al 0
 # sobrantes— porque un campo de más suele ser un typo o un productor de otra
 # versión, y es mejor que falle fuerte y temprano que en medio de una ronda.
 _CAMPOS_MENSAJE = frozenset(
-    ("v", "seq", "ts_ms", "phase", "grid", "rovers", "cubes", "obstacles", "start", "depots",
-     "depot_size", "cube_side")
+    ("v", "seq", "ts_ms", "phase", "clock", "grid", "rovers", "cubes", "obstacles", "start",
+     "depots", "depot_size", "cube_side")
 )
 _CAMPOS_GRID = frozenset(("cols", "rows", "cell_mm"))
 _CAMPOS_DEPOT_SIZE = frozenset(("length", "depth"))
+_CAMPOS_CLOCK = frozenset(("elapsed_ms", "remaining_ms", "total_ms"))
 _CAMPOS_ROVER = frozenset(("id", "col", "row", "theta", "age_ms"))
 _CAMPOS_CUBE = frozenset(("color", "col", "row", "age_ms"))
 _CAMPOS_OBSTACLE = frozenset(("col", "row", "age_ms"))
@@ -332,6 +333,48 @@ class DepotSize:
 
 
 @dataclass(frozen=True)
+class Clock:
+    """El cronómetro oficial de la ronda, en milisegundos.
+
+    Los tres valores son del **mismo instante** que el `ts_ms` del mensaje que
+    los lleva. Eso es lo que permite resolver con **un** mensaje y sin memoria en
+    qué punto de la ronda está la cancha: un robot no puede llevar su propio
+    reloj, porque se desvía del oficial, y uno que se conecta tarde no sabría en
+    qué momento entró.
+
+    Por qué tres valores y no uno
+    -----------------------------
+    Porque cada fase tiene una pregunta distinta. En `READY` interesa cuánto
+    falta para poder moverse; en `RUNNING`, cuánto queda de ronda; al terminar,
+    **cuánto tardó**, que es `elapsed_ms`. Un solo campo obligaría a saber de qué
+    fase es el total para interpretarlo, y un campo cuyo significado depende de
+    otro campo se lee mal una vez y se lee mal para siempre.
+
+    Tampoco viaja un instante absoluto de vencimiento: eso obligaría a tener el
+    reloj sincronizado con el nuestro, que es exactamente el reloj propio que
+    esto viene a evitar.
+
+    `total_ms` en cero significa que **no se está contando nada**. Es lo que
+    distingue "esta fase no cuenta" de "cuenta y va en cero".
+
+    Vale siempre `elapsed_ms + remaining_ms == total_ms`.
+    """
+
+    elapsed_ms: int
+    remaining_ms: int
+    total_ms: int
+
+    def a_dict(self) -> dict[str, Any]:
+        return {"elapsed_ms": self.elapsed_ms, "remaining_ms": self.remaining_ms,
+                "total_ms": self.total_ms}
+
+    @staticmethod
+    def desde_dict(d: dict[str, Any]) -> Clock:
+        return Clock(elapsed_ms=d["elapsed_ms"], remaining_ms=d["remaining_ms"],
+                     total_ms=d["total_ms"])
+
+
+@dataclass(frozen=True)
 class Mensaje:
     """Un mensaje completo de telemetría: la foto del mundo en un instante.
 
@@ -350,6 +393,7 @@ class Mensaje:
     # publicar un número inventado por esta clase.
     depot_size: DepotSize
     cube_side: float  # en celdas, como toda longitud del mensaje
+    clock: Clock      # el cronómetro oficial, del mismo instante que ts_ms
     depots: tuple[Depot, ...] = ()
     rovers: tuple[Rover, ...] = ()
     cubes: tuple[Cube, ...] = ()
@@ -370,6 +414,7 @@ class Mensaje:
             "depots": [d.a_dict() for d in self.depots],
             "depot_size": self.depot_size.a_dict(),
             "cube_side": self.cube_side,
+            "clock": self.clock.a_dict(),
         }
 
     @staticmethod
@@ -391,6 +436,7 @@ class Mensaje:
             start=Start.desde_dict(d["start"]),
             depot_size=DepotSize.desde_dict(d["depot_size"]),
             cube_side=d["cube_side"],
+            clock=Clock.desde_dict(d["clock"]),
             depots=tuple(Depot.desde_dict(x) for x in d["depots"]),
             rovers=tuple(Rover.desde_dict(x) for x in d["rovers"]),
             cubes=tuple(Cube.desde_dict(x) for x in d["cubes"]),
@@ -500,6 +546,26 @@ def validate_message(msg: Any) -> str | None:
         return "'ts_ms' debe ser un entero >= 0, llegó {!r}".format(msg["ts_ms"])
     if msg["phase"] not in PHASES:
         return "'phase' inválida: {!r} (válidas: {})".format(msg["phase"], list(PHASES))
+
+    # --- clock ------------------------------------------------------------
+    error = _revisar_campos(msg["clock"], _CAMPOS_CLOCK, "clock")
+    if error:
+        return error
+    reloj = msg["clock"]
+    for campo in ("elapsed_ms", "remaining_ms", "total_ms"):
+        if not _es_entero(reloj[campo]) or reloj[campo] < 0:
+            return "clock: '{}' debe ser un entero >= 0, llegó {!r}".format(
+                campo, reloj[campo])
+    # La suma no es un capricho: es lo que hace que los tres valores sean el
+    # mismo instante y no tres lecturas de momentos distintos. Si no cierra, el
+    # productor está armando el reloj a mano en algún lado.
+    if reloj["elapsed_ms"] + reloj["remaining_ms"] != reloj["total_ms"]:
+        return (
+            "clock: elapsed_ms + remaining_ms debe ser igual a total_ms, llegó "
+            "{} + {} = {} contra {}".format(
+                reloj["elapsed_ms"], reloj["remaining_ms"],
+                reloj["elapsed_ms"] + reloj["remaining_ms"], reloj["total_ms"])
+        )
 
     # --- grid -------------------------------------------------------------
     error = _revisar_campos(msg["grid"], _CAMPOS_GRID, "grid")

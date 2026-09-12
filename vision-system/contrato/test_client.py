@@ -128,6 +128,28 @@ def cubo_en_su_zona(cubo, depot, depot_size, grid, cube_side):
     return falta == 0.0, falta
 
 
+def _reloj(clock: dict[str, Any]) -> str:
+    """El cronómetro del mensaje, en texto.
+
+    `total_ms` en cero significa que no se está contando nada, y por eso no se
+    imprime un "0:00 de 0:00" que parecería una ronda a punto de terminar.
+
+    El tiempo NO se calcula con el reloj de esta máquina: sale tal cual del
+    mensaje, que es el punto del campo. Un cliente que llevara su propio reloj
+    se desviaría del oficial, y uno que se conecta tarde no sabría en qué
+    momento entró.
+    """
+    if not clock["total_ms"]:
+        return "sin cuenta"
+    return "{}  (quedan {})".format(
+        _mmss(clock["elapsed_ms"]), _mmss(clock["remaining_ms"]))
+
+
+def _mmss(ms: int) -> str:
+    segundos = ms // 1000
+    return "{}:{:02d}".format(segundos // 60, segundos % 60)
+
+
 # --------------------------------------------------------------------------
 # Ejemplo de consumo — lo que un equipo haría de verdad
 # --------------------------------------------------------------------------
@@ -150,8 +172,9 @@ def ejemplo_de_consumo(msg: dict[str, Any]) -> list[str]:
     lineas = []
     grid = msg["grid"]
     lineas.append(
-        "cancha: {}x{} celdas de {} mm  |  fase: {}".format(
-            grid["cols"], grid["rows"], grid["cell_mm"], msg["phase"]
+        "cancha: {}x{} celdas de {} mm  |  fase: {}  |  {}".format(
+            grid["cols"], grid["rows"], grid["cell_mm"], msg["phase"],
+            _reloj(msg["clock"]),
         )
     )
 

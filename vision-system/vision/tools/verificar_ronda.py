@@ -239,6 +239,28 @@ def verificar_reloj(cfg) -> bool:
     casos.append(("FINISHED por tiempo, 30 s después", a.reloj(),
                   (DURACION_MS, 0, DURACION_MS)))
 
+    # El caso que SIEMPRE ocurre en la realidad y que la primera versión de esta
+    # herramienta no probaba: `tictac` no se entera en el instante exacto del
+    # vencimiento, sino en el cuadro siguiente. El transcurrido real se pasa, y
+    # sin recortar al total el mensaje viola el invariante que el contrato
+    # valida. Se descubrió en el simulador: 5019 ms sobre una ronda de 5000.
+    a, reloj = _arbitro(cfg, "READY")
+    reloj.avanzar(PREPARACION_MS + 19)
+    a.tictac()
+    reloj.avanzar(DURACION_MS + 347)   # el bucle se entera 347 ms tarde
+    a.tictac()
+    casos.append(("FINISHED habiéndose PASADO 347 ms", a.reloj(),
+                  (DURACION_MS, 0, DURACION_MS)))
+
+    # Lo mismo cerrando a mano, donde el recorte no tiene que hacer nada.
+    a, reloj = _arbitro(cfg, "READY")
+    reloj.avanzar(PREPARACION_MS)
+    a.tictac()
+    reloj.avanzar(72_500)
+    a.intentar("stop")
+    casos.append(("FINISHED por el operador a los 72,5 s", a.reloj(),
+                  (72_500, DURACION_MS - 72_500, DURACION_MS)))
+
     todo_bien = True
     for nombre, r, esperado in casos:
         obtenido = (r.transcurrido_ms, r.restante_ms, r.total_ms)

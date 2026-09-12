@@ -111,9 +111,14 @@ def escribir_acta(
     *,
     motivo: str,
     tiempo_final_ms: int | None,
+    tuvo_geometria: bool,
     acopio=None,
     estado=None,
     arranque: tuple[str, ...] = (),
+    sintetico: bool = False,
+    perfil: dict | None = None,
+    perdidas_geometria: int = 0,
+    peor_ceguera_ms: int = 0,
     carpeta: str | None = None,
 ) -> str:
     """Escribe el acta y devuelve la ruta. Lanza si no puede; el que llama decide.
@@ -121,7 +126,18 @@ def escribir_acta(
     `arranque` son los colores que **ya estaban dentro de su zona** al empezar a
     jugar. Vacío es lo normal; con algo adentro, el acta marca el arranque como
     irregular.
+
+    `tuvo_geometria` es una condición, no un dato: **sin coordenadas no hay
+    acta**, en ninguna circunstancia. La guarda vive acá adentro y no solo en
+    quien llama, porque es la clase de regla que un llamador futuro saltearía sin
+    darse cuenta. Una ronda que el árbitro no pudo ver no produce un documento
+    que parezca válido.
     """
+    if not tuvo_geometria:
+        raise ValueError(
+            "no se escribe acta de una ronda sin geometría: el sistema nunca tuvo "
+            "coordenadas, así que no vio la cancha y no hay nada que certificar"
+        )
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     destino = carpeta if carpeta is not None else os.path.join(base, CARPETA)
     os.makedirs(destino, exist_ok=True)
@@ -133,6 +149,11 @@ def escribir_acta(
     datos = {
         "cuando": ahora.isoformat(timespec="seconds"),
         "protocolo": VERSION_PROTOCOLO,
+        # Arriba de todo y con nombre inequívoco: un acta de datos generados
+        # tiene exactamente la misma forma que una de verdad, y esa es justo la
+        # clase de documento que parece válido y no lo es. Enterrar el dato en
+        # una nota interna sería confiar en que alguien la lea.
+        "NO_ES_UNA_RONDA_REAL": sintetico,
         "motivo": motivo,
         "tiempo_final_ms": tiempo_final_ms,
         "tiempo_final": mmss(tiempo_final_ms),
@@ -142,6 +163,20 @@ def escribir_acta(
         },
         "cubos_en_posicion": en_posicion,
         "cubos": _cubos(acopio),
+        "perfil_camara": perfil or {"camara": None, "nivel": None, "motivo": "",
+                                    "_nota": "ronda sin cámara real (datos sintéticos)"},
+        "geometria": {
+            "perdidas": perdidas_geometria,
+            "peor_perdida_ms": peor_ceguera_ms,
+            "_nota": (
+                "Cuántas veces el sistema se quedó sin coordenadas durante la ronda y "
+                "cuánto duró la más larga. Cero es lo normal. Se anota aunque la ronda "
+                "termine bien: una ronda con tres apagones de 1,8 s es una que el árbitro "
+                "vio a medias, y eso tiene que poder verse sin que cambie el veredicto. "
+                "Pasado el umbral de ronda.geometria_perdida_ms, la ronda se cierra con "
+                "motivo `geometria_perdida`."
+            ),
+        },
         "posiciones_finales": _posiciones(estado),
         "arranque": {
             "irregular": bool(arranque),

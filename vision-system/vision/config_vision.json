@@ -170,6 +170,10 @@
     "_nota_preparacion": "Cuánto dura READY. Al llegar a cero la ronda pasa a RUNNING SOLA, y no hay tecla que lo adelante: si se pudiera adelantar, el tiempo de preparación igual para todos los equipos sería decorativo.",
     "duracion_ms": 600000,
     "_nota_duracion": "Cuánto dura RUNNING. Al agotarse, la ronda se cierra con motivo `tiempo_agotado`. También puede cerrarse antes, con motivo `reto_cumplido`, si los tres cubos quedan en posición.",
+    "geometria_perdida_ms": 2000,
+    "_nota_geometria_perdida": "Cuánto tiempo CONTINUO puede estar el sistema sin coordenadas válidas durante RUNNING antes de cerrar la ronda con motivo `geometria_perdida`. Se reinicia con cualquier cuadro bueno: se mide la ceguera seguida, no la acumulada, y no se cuenta en cuadros porque los fps varían. Ver tres marcadores con la homografía conservada NO es pérdida: ese es el modo degradado admitido.",
+    "_POR_QUE_2000": "A 30 fps son 60 cuadros seguidos en blanco. Una mano cruzando el tablero o un rover tapando una esquina dura bastante menos de un segundo, y medido en esta cancha el sistema corrió tardes enteras con UN solo cuadro fallado. Dos segundos de ceguera continua no son una oclusión: son la cámara movida, un cable suelto o una luz apagada. Y son el 0,3 % de una ronda de diez minutos, así que el acta sigue cubriendo lo que dice cubrir.",
+    "_EL_CRONOMETRO_NO_SE_PAUSA": "Durante una pérdida de geometría el cronómetro de la ronda SIGUE CORRIENDO. No es un descuido: el tiempo de competencia corre aunque el árbitro parpadee, y pausarlo volvería explotable tapar un marcador para ganar tiempo. Lo mismo vale para la preparación.",
     "_RELOJ_MONOTONO": "El cronómetro oficial se mide con reloj MONÓTONO, nunca con el de pared: un ajuste de hora del sistema —o un servidor de tiempo corrigiendo la máquina en mitad de una ronda— no puede alterar un tiempo de competencia. El `ts_ms` del mensaje sigue siendo de pared, como manda el contrato: son dos relojes con dos trabajos distintos."
   },
   "deteccion_rovers": {

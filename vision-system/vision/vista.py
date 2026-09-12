@@ -427,6 +427,26 @@ class Vista:
                 panel.destacado(mmss(reloj.transcurrido_ms), BLANCO,
                                 "tiempo final{}".format(" · " + motivo if motivo else ""))
 
+        # Que el sistema no vea la cancha es lo más grave que puede pasarle a un
+        # árbitro, así que va arriba de todo lo demás y en rojo. Durante la ronda
+        # se muestra además cuánto falta para que se cierre sola: quien mira
+        # tiene ese tiempo para destapar un marcador.
+        if not info.get("geometria_ok", True):
+            ciego = info.get("ciego_ms", 0)
+            limite = info.get("limite_ceguera_ms", 0)
+            if fase == "RUNNING" and limite:
+                detalle = "se cierra la ronda en {:.1f} s si no vuelve".format(
+                    max(0, limite - ciego) / 1000.0)
+            elif fase == "READY":
+                detalle = "la ronda no va a arrancar hasta que vuelvan"
+            else:
+                detalle = "no se puede preparar una ronda así"
+            panel.destacado("SIN COORDENADAS", ROJO, detalle)
+        elif fase == "IDLE" and info.get("impedimento"):
+            # En IDLE no alarma, pero tiene que explicar por qué `r` no va a
+            # funcionar: descubrirlo apretando la tecla es peor.
+            panel.datos("no se puede preparar: {}".format(info["impedimento"]), AMBAR)
+
         # Un cubo que ya está en su zona durante la preparación es un arranque
         # irregular: la ronda empezaría con parte del reto hecho. No se impide
         # —el acta lo registra y se decide después— pero tiene que verse ACÁ,

@@ -348,6 +348,11 @@ class Ronda:
 
     preparacion_ms: int
     duracion_ms: int
+    #: Cuánta ceguera CONTINUA se tolera en RUNNING antes de cerrar la ronda.
+    #: El cronómetro **no se pausa** mientras tanto: el tiempo de competencia
+    #: corre aunque el árbitro parpadee, y pausarlo volvería explotable tapar un
+    #: marcador para ganar tiempo.
+    geometria_perdida_ms: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -846,6 +851,7 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     ronda = Ronda(
         preparacion_ms=int(d["ronda"]["preparacion_ms"]),
         duracion_ms=int(d["ronda"]["duracion_ms"]),
+        geometria_perdida_ms=int(d["ronda"]["geometria_perdida_ms"]),
     )
 
     dr = d["deteccion_rovers"]
@@ -1115,6 +1121,18 @@ def _revisar_zonas(cfg: ConfigVision) -> str | None:
         )
     if cfg.ronda.duracion_ms <= 0:
         return "ronda.duracion_ms tiene que ser > 0: es lo que dura la ronda"
+    if cfg.ronda.geometria_perdida_ms <= 0:
+        return (
+            "ronda.geometria_perdida_ms tiene que ser > 0: en cero, el primer cuadro "
+            "en que una mano tape un marcador cerraría la ronda"
+        )
+    if cfg.ronda.geometria_perdida_ms >= cfg.ronda.duracion_ms:
+        return (
+            "ronda.geometria_perdida_ms ({} ms) no puede ser mayor o igual que "
+            "ronda.duracion_ms ({} ms): la ronda se agotaría antes de que la pérdida "
+            "de geometría llegara a cerrarla, así que la guarda no existiría".format(
+                cfg.ronda.geometria_perdida_ms, cfg.ronda.duracion_ms)
+        )
     if cfg.ronda.duracion_ms <= cfg.conteo_acopio.permanencia_minima_ms:
         return (
             "ronda.duracion_ms ({} ms) no puede ser menor o igual que "

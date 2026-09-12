@@ -42,7 +42,8 @@ try:  # como paquete
     from ..record.acta import escribir_acta
     from ..reglas.acopio import ContadorAcopio
     from ..sistema import (
-        MOTIVO_ABORTADA, MOTIVO_OPERADOR, MOTIVO_RETO, MOTIVO_TIEMPO, Arbitro, _TRANSICIONES,
+        MOTIVO_ABORTADA, MOTIVO_GEOMETRIA, MOTIVO_OPERADOR, MOTIVO_RETO, MOTIVO_TIEMPO,
+        Arbitro, _TRANSICIONES,
     )
 except ImportError:  # como script suelto
     from vision.configuracion import Ronda, cargar_config  # type: ignore[no-redef]
@@ -50,11 +51,13 @@ except ImportError:  # como script suelto
     from vision.record.acta import escribir_acta  # type: ignore[no-redef]
     from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
     from vision.sistema import (  # type: ignore[no-redef]
-        MOTIVO_ABORTADA, MOTIVO_OPERADOR, MOTIVO_RETO, MOTIVO_TIEMPO, Arbitro, _TRANSICIONES,
+        MOTIVO_ABORTADA, MOTIVO_GEOMETRIA, MOTIVO_OPERADOR, MOTIVO_RETO, MOTIVO_TIEMPO,
+        Arbitro, _TRANSICIONES,
     )
 
 PREPARACION_MS = 60_000
 DURACION_MS = 600_000
+CEGUERA_MS = 2_000
 
 
 class RelojFalso:
@@ -73,7 +76,8 @@ class RelojFalso:
 def _config():
     cfg = cargar_config()
     return dataclasses.replace(
-        cfg, ronda=Ronda(preparacion_ms=PREPARACION_MS, duracion_ms=DURACION_MS))
+        cfg, ronda=Ronda(preparacion_ms=PREPARACION_MS, duracion_ms=DURACION_MS,
+                         geometria_perdida_ms=CEGUERA_MS))
 
 
 def _arbitro(cfg, inicial="IDLE"):
@@ -91,9 +95,12 @@ def verificar_transiciones(cfg) -> bool:
     casos = []
 
     # --- las que hace una persona ---------------------------------------
+    # Con geometría: se prepara. Sin geometría es otro caso, y vive en el
+    # bloque de guardas, porque ahí es una regla y no un trámite.
     a, _ = _arbitro(cfg)
+    a.tictac(True)
     a.intentar("ready")
-    casos.append(("IDLE + ready", a.fase, "READY"))
+    casos.append(("IDLE + ready (viendo la cancha)", a.fase, "READY"))
 
     a, _ = _arbitro(cfg, "READY")
     a.intentar("ready")
@@ -414,6 +421,126 @@ def verificar_cierre_por_reto(cfg) -> bool:
     return todo_bien
 
 
+def verificar_guardas_de_geometria(cfg) -> bool:
+    """Un árbitro no puede juzgar lo que no ve.
+
+    Este bloque existe por una ronda real: el sistema corrió doce segundos con la
+    cámara mirando una habitación —la USB no estaba conectada y abrió la
+    integrada—, pasó de READY a RUNNING a FINISHED solo, publicó telemetría y
+    escribió un acta de 0:08. Todo el mecanismo funcionó. Lo que faltaba era que
+    se negara.
+
+    Las tres puertas que se comprueban acá son las tres por las que una ronda
+    puede empezar o seguir a ciegas: la tecla, el vencimiento de la preparación,
+    y el apagón en medio del juego.
+    """
+    print("=" * 78)
+    print("GUARDAS DE GEOMETRÍA: sin ver la cancha no se arbitra")
+    print("=" * 78)
+
+    filas = []
+
+    # --- la puerta de adelante: la tecla ---------------------------------
+    a, _ = _arbitro(cfg)
+    a.tictac(False)
+    a.intentar("ready")
+    filas.append(("IDLE + ready SIN coordenadas", a.fase, "IDLE"))
+
+    a, _ = _arbitro(cfg)
+    a.tictac(True)
+    a.intentar("ready")
+    filas.append(("IDLE + ready CON coordenadas", a.fase, "READY"))
+
+    b = Arbitro(cfg, "IDLE", reloj=RelojFalso(), perfil_bloquea=True)
+    b.tictac(True)
+    b.intentar("ready")
+    filas.append(("ready con un perfil que DEFORMA", b.fase, "IDLE"))
+
+    # --- la puerta de atrás: el vencimiento de la preparación ------------
+    a, reloj = _arbitro(cfg, "READY")
+    reloj.avanzar(PREPARACION_MS)
+    a.tictac(False)
+    filas.append(("preparación vencida SIN coordenadas", a.fase, "READY"))
+    espera = a.reloj()
+    a.tictac(True)
+    filas.append(("...y cuando vuelven, arranca", a.fase, "RUNNING"))
+
+    # --- el apagón en medio del juego ------------------------------------
+    a, reloj = _arbitro(cfg, "READY")
+    reloj.avanzar(PREPARACION_MS)
+    a.tictac(True)
+    reloj.avanzar(30_000)
+    a.tictac(False)
+    reloj.avanzar(CEGUERA_MS - 1)
+    a.tictac(False)
+    filas.append(("ceguera de {} ms: aguanta".format(CEGUERA_MS - 1), a.fase, "RUNNING"))
+    a.tictac(True)                                   # parpadeo que se recupera
+    reloj.avanzar(10_000)
+    a.tictac(True)
+    filas.append(("recuperada: la ronda sigue", a.fase, "RUNNING"))
+
+    ciega, reloj_c = _arbitro(cfg, "READY")
+    reloj_c.avanzar(PREPARACION_MS)
+    ciega.tictac(True)
+    reloj_c.avanzar(30_000)
+    ciega.tictac(False)
+    reloj_c.avanzar(CEGUERA_MS + 1)
+    ciega.tictac(False)
+    filas.append(("ceguera de {} ms: cierra".format(CEGUERA_MS + 1), ciega.fase, "FINISHED"))
+
+    print("  {:<44} {:>10} {:>12}  {}".format("situación", "queda en", "se esperaba", "estado"))
+    print("  " + "-" * 84)
+    todo_bien = True
+    for nombre, obtenido, esperado in filas:
+        paso = obtenido == esperado
+        todo_bien = todo_bien and paso
+        print("  {:<44} {:>10} {:>12}  {}".format(
+            nombre, obtenido, esperado, "OK" if paso else "FALLA"))
+
+    # --- lo que no se ve en la tabla -------------------------------------
+    print()
+    comprobaciones = [
+        ("el motivo del cierre es geometria_perdida", ciega.motivo == MOTIVO_GEOMETRIA),
+        ("esperando, la preparación ya está consumida: no se devuelve tiempo",
+         espera.restante_ms == 0 and espera.total_ms == PREPARACION_MS),
+        ("el cronómetro NO se pausa durante el apagón",
+         ciega.tiempo_final_ms is not None
+         and ciega.tiempo_final_ms >= 30_000 + CEGUERA_MS),
+        ("las pérdidas se cuentan", a.perdidas_geometria == 1),
+        ("y se registra cuánto duró la peor", a.peor_ceguera_ms == CEGUERA_MS - 1),
+    ]
+
+    # El reto no se da por cumplido a ciegas: el falla-abierto conserva el
+    # último estado bueno, así que un cubo "en posición" podría completarlo
+    # durante un apagón.
+    ciego2, reloj2 = _arbitro(cfg, "READY")
+    reloj2.avanzar(PREPARACION_MS)
+    ciego2.tictac(True)
+    reloj2.avanzar(10_000)
+    ciego2.observar_reto(False, None)      # se vio incompleto: la regla se cumple
+    ciego2.tictac(False)                   # y ahora está ciego
+    reloj2.avanzar(500)
+    ciego2.observar_reto(True, reloj2())
+    comprobaciones.append(
+        ("a ciegas no se da por cumplido el reto", ciego2.fase == "RUNNING"))
+
+    # Y sin geometría no hay acta, ni aunque se la pidan directamente.
+    try:
+        escribir_acta(cfg, motivo=MOTIVO_GEOMETRIA, tiempo_final_ms=1000,
+                      tuvo_geometria=False, carpeta=tempfile.mkdtemp())
+        se_nego = False
+    except ValueError:
+        se_nego = True
+    comprobaciones.append(("sin geometría, el acta se niega a escribirse", se_nego))
+
+    for nombre, ok in comprobaciones:
+        todo_bien = todo_bien and ok
+        print("  {:<70} {}".format(nombre, "OK" if ok else "FALLA"))
+
+    print("\n  resultado: {}\n".format("TODO OK" if todo_bien else "HAY FALLAS"))
+    return todo_bien
+
+
 def verificar_acta(cfg) -> bool:
     """El acta: que se escriba, que se lea, y que diga lo que pasó.
 
@@ -443,14 +570,19 @@ def verificar_acta(cfg) -> bool:
     estado = EstadoMundo(ts_ms=permanencia, fase="FINISHED", cubos=cubos)
 
     ruta = escribir_acta(cfg, motivo=MOTIVO_RETO, tiempo_final_ms=200_000,
-                         acopio=completo, estado=estado, carpeta=carpeta)
+                         tuvo_geometria=True, acopio=completo, estado=estado,
+                         perfil={"camara": "Logitech C270", "nivel": "compatible",
+                                 "motivo": "", "deforma": False},
+                         perdidas_geometria=2, peor_ceguera_ms=740,
+                         carpeta=carpeta)
     with open(ruta, encoding="utf-8") as f:
         acta = json.load(f)
 
     # Y una ronda abortada, sin cubos en la cancha: el caso del infinito.
     vacio = contador.actualizar(EstadoMundo(ts_ms=0, fase="READY"), 0, mono=0.0)
     ruta2 = escribir_acta(cfg, motivo=MOTIVO_ABORTADA, tiempo_final_ms=None,
-                          acopio=vacio, estado=None, arranque=("green",), carpeta=carpeta)
+                          tuvo_geometria=True, acopio=vacio, estado=None,
+                          arranque=("green",), carpeta=carpeta)
     with open(ruta2, encoding="utf-8") as f:
         acta2 = json.load(f)
 
@@ -499,6 +631,7 @@ def main(argv: list[str] | None = None) -> int:
         verificar_reloj(cfg),
         verificar_reto_cumplido(cfg),
         verificar_cierre_por_reto(cfg),
+        verificar_guardas_de_geometria(cfg),
         verificar_acta(cfg),
     ]
     print("=" * 78)

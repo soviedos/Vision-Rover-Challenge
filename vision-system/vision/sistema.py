@@ -113,6 +113,7 @@ MOTIVO_RETO = "reto_cumplido"
 MOTIVO_TIEMPO = "tiempo_agotado"
 MOTIVO_OPERADOR = "detenida_por_operador"
 MOTIVO_ABORTADA = "abortada_en_preparacion"
+MOTIVO_GEOMETRIA = "geometria_perdida"
 
 #: Transiciones que dispara UNA PERSONA desde el teclado.
 #:
@@ -160,7 +161,8 @@ class Arbitro:
     merece enterarse.
     """
 
-    def __init__(self, cfg: ConfigVision, inicial: str = "IDLE", reloj=time.monotonic):
+    def __init__(self, cfg: ConfigVision, inicial: str = "IDLE", reloj=time.monotonic,
+                 perfil_bloquea: bool = False):
         if inicial not in ("IDLE", "READY"):
             # Arrancar en RUNNING produciría una ronda que PARECE válida y no lo
             # es: sin preparación, sin cronómetro desde cero y sin acta de
@@ -186,6 +188,24 @@ class Arbitro:
         #: segundo. El cierre por reto cumplido exige haber pasado de incompleto
         #: a completo DURANTE la ronda.
         self._vio_incompleto = False
+        #: Si el perfil de cámara DEFORMA la imagen. No frena al sistema como
+        #: observador —a veces uno quiere aplicar un perfil ajeno justamente
+        #: para comprobar que está mal— pero sí impide arbitrar: unas
+        #: coordenadas deformadas son plausibles y falsas, que es peor que no
+        #: tenerlas.
+        self._perfil_bloquea = perfil_bloquea
+        #: Si el último cuadro produjo coordenadas. Ver `tictac`.
+        self._geometria_ok = False
+        #: Desde cuándo se está sin coordenadas, en tiempo monótono.
+        self._ciego_desde: float | None = None
+        #: Para el acta: cuántas veces se perdió la geometría en esta ronda y
+        #: cuánto duró la peor. Una ronda con tres apagones de 1,8 s es una que
+        #: el árbitro vio a medias, y eso tiene que poder verse aunque el
+        #: veredicto no cambie.
+        self._perdidas = 0
+        self._peor_ceguera_ms = 0
+        #: Si alguna vez hubo coordenadas en esta ronda. Sin esto no hay acta.
+        self._tuvo_geometria = False
         if inicial == "READY":
             self._entrar("READY")
 
@@ -207,6 +227,60 @@ class Arbitro:
         """El tiempo oficial de la ronda cerrada, o `None` si sigue abierta."""
         with self._lock:
             return self._final_ms
+
+    @property
+    def geometria_ok(self) -> bool:
+        """Si el último cuadro produjo coordenadas."""
+        with self._lock:
+            return self._geometria_ok
+
+    @property
+    def ciego_ms(self) -> int:
+        """Cuánto lleva sin ver la cancha, ahora. Cero si está viendo."""
+        with self._lock:
+            return self._ciego_ms()
+
+    @property
+    def perdidas_geometria(self) -> int:
+        """Cuántas veces se perdió la cancha de vista en esta ronda."""
+        with self._lock:
+            return self._perdidas
+
+    @property
+    def peor_ceguera_ms(self) -> int:
+        """Cuánto duró la pérdida más larga de esta ronda."""
+        with self._lock:
+            return max(self._peor_ceguera_ms, self._ciego_ms())
+
+    @property
+    def tuvo_geometria(self) -> bool:
+        """Si alguna vez hubo coordenadas. Sin esto no se escribe acta."""
+        with self._lock:
+            return self._tuvo_geometria
+
+    def por_que_no_puede_arbitrar(self) -> str | None:
+        """Qué impide preparar una ronda ahora mismo, o `None` si nada.
+
+        Texto largo, para la consola: ahí hay lugar y conviene decir qué hacer.
+        """
+        with self._lock:
+            return self._por_que_no_puede_arbitrar()
+
+    @property
+    def impedimento_corto(self) -> str | None:
+        """Lo mismo en pocas palabras, para el panel.
+
+        El panel se dimensiona por su contenido para tapar el mínimo de video
+        posible, así que una frase larga acá no es un detalle de estilo: estira
+        el panel hasta cubrir media cancha. La explicación completa y el qué
+        hacer viven en la consola.
+        """
+        with self._lock:
+            if self._perfil_bloquea:
+                return "el perfil de cámara deforma la imagen"
+            if not self._geometria_ok:
+                return "no se ven los marcadores de esquina"
+            return None
 
     def reloj(self) -> RelojRonda:
         """El cronómetro ahora, para que viaje dentro del estado del mundo."""
@@ -235,6 +309,10 @@ class Arbitro:
             if self._fase not in desde:
                 return "'{}' no es válido desde {} (se puede desde {})".format(
                     comando, self._fase, list(desde))
+            if destino == "READY":
+                impedimento = self._por_que_no_puede_arbitrar()
+                if impedimento:
+                    return "no se puede preparar una ronda: " + impedimento
             anterior = self._fase
             if destino == "FINISHED":
                 self._cerrar(MOTIVO_OPERADOR)
@@ -246,26 +324,64 @@ class Arbitro:
                 self._entrar(destino)
             return "fase: {} -> {}".format(anterior, destino)
 
-    def tictac(self) -> str | None:
+    def tictac(self, geometria_ok: bool = True) -> str | None:
         """Deja que el reloj haga lo suyo. Se llama una vez por cuadro.
 
-        Devuelve el aviso de la transición si hubo una, o `None`. Vive en el
-        hilo de proceso y no en un temporizador aparte porque una ronda que
-        avanza sin cuadros no tendría sentido: si la cámara se cayó, lo que hace
-        falta es que alguien mire la pantalla, no que el reloj siga solo.
+        `geometria_ok` dice si ESTE cuadro produjo coordenadas. Ver los cuatro
+        marcadores, o tres con la homografía conservada, cuenta como sí: ese es
+        el modo degradado admitido. Dos o menos, o tres que desmienten la
+        homografía guardada, cuenta como no.
+
+        EL CRONÓMETRO NO SE PAUSA MIENTRAS NO SE VE LA CANCHA
+        -----------------------------------------------------
+        Esto es deliberado y no es un defecto que haya que arreglar. El tiempo
+        de competencia corre aunque el árbitro parpadee, por dos razones:
+
+        1. Es lo justo. La ronda dura lo que dura; que el sistema tenga un
+           problema de visión no le regala segundos a nadie.
+        2. Pausarlo sería **explotable**: tapar un marcador daría tiempo extra,
+           y alguien lo descubriría.
+
+        Lo mismo vale para la preparación. Si al llegar a cero no hay
+        coordenadas, la ronda **no arranca** —esperá a que vuelvan— pero el
+        reloj de preparación ya se consumió: nadie gana preparación tapando la
+        cancha, solo demora el arranque para todos por igual.
+
+        Devuelve un aviso si hubo algo que contar, o `None`. Vive en el hilo de
+        proceso y no en un temporizador aparte porque una ronda que avanza sin
+        cuadros no tendría sentido: si la cámara se cayó, lo que hace falta es
+        que alguien mire la pantalla, no que el reloj siga solo.
         """
         with self._lock:
+            aviso = self._registrar_geometria(geometria_ok)
             if self._inicio is None or self._final_ms is not None:
-                return None
-            if self._transcurrido_ms() < self._total_ms:
-                return None
+                return aviso
+            vencido = self._transcurrido_ms() >= self._total_ms
+
             if self._fase == "READY":
+                if not vencido:
+                    return aviso
+                if not self._geometria_ok:
+                    # Se acabó la preparación pero no se ve la cancha. Se
+                    # espera, sin devolver el tiempo consumido.
+                    return aviso
                 self._entrar("RUNNING")
                 return "fase: READY -> RUNNING (se agotó la preparación)"
+
             if self._fase == "RUNNING":
-                self._cerrar(MOTIVO_TIEMPO)
-                return "fase: RUNNING -> FINISHED (se agotó el tiempo)"
-            return None
+                # La ceguera se revisa ANTES que el vencimiento: si las dos
+                # cosas pasan en el mismo cuadro, una ronda que terminó con el
+                # árbitro sin ver no puede quedar registrada como un cierre
+                # limpio por tiempo.
+                ciego = self._ciego_ms()
+                if ciego > self._cfg.ronda.geometria_perdida_ms:
+                    self._cerrar(MOTIVO_GEOMETRIA)
+                    return ("fase: RUNNING -> FINISHED (se perdió la cancha de vista "
+                            "durante {} ms)".format(ciego))
+                if vencido:
+                    self._cerrar(MOTIVO_TIEMPO)
+                    return "fase: RUNNING -> FINISHED (se agotó el tiempo)"
+            return aviso
 
     def observar_reto(self, completo: bool, instante: float | None) -> str | None:
         """Le informa al árbitro cómo está el reto, y él decide si cerrar.
@@ -279,6 +395,11 @@ class Arbitro:
         with self._lock:
             if self._fase != "RUNNING" or self._final_ms is not None:
                 return None
+            if not self._geometria_ok:
+                # El falla-abierto conserva el último estado bueno, así que un
+                # cubo "en posición" podría completar el reto durante un apagón.
+                # El árbitro no da por cumplido lo que no está viendo.
+                return None
             if not completo:
                 self._vio_incompleto = True
                 return None
@@ -291,7 +412,54 @@ class Arbitro:
 
     # -- interno (siempre con el candado tomado) --------------------------
 
+    def _por_que_no_puede_arbitrar(self) -> str | None:
+        """Las condiciones para arbitrar. Se piden al entrar en READY.
+
+        Como observador el sistema falla abierto y publica lo que puede; como
+        árbitro no admite "más o menos". Estas dos son las que separan un
+        veredicto de un documento que parece válido.
+        """
+        if self._perfil_bloquea:
+            return ("el perfil de cámara no corresponde a la cámara conectada y va a "
+                    "DEFORMAR la imagen, así que las coordenadas saldrían plausibles y "
+                    "falsas. Calibrá esta cámara o elegí el perfil correcto")
+        if not self._geometria_ok:
+            return ("no hay coordenadas. Hacen falta los cuatro marcadores de esquina, o "
+                    "tres con la geometría conservada. Un árbitro no puede juzgar lo que "
+                    "no ve")
+        return None
+
+    def _registrar_geometria(self, ok: bool) -> str | None:
+        """Lleva la cuenta de los apagones. Devuelve aviso solo en los bordes."""
+        antes = self._geometria_ok
+        self._geometria_ok = ok
+        en_ronda = self._fase in ("READY", "RUNNING") and self._final_ms is None
+        if ok:
+            self._tuvo_geometria = True
+            if self._ciego_desde is not None:
+                duro = self._ciego_ms()
+                self._peor_ceguera_ms = max(self._peor_ceguera_ms, duro)
+                self._ciego_desde = None
+                return "se recuperaron las coordenadas tras {} ms sin ver la cancha".format(duro)
+            return None
+        if antes or self._ciego_desde is None:
+            self._ciego_desde = self._reloj()
+            if en_ronda:
+                self._perdidas += 1
+                return "SIN COORDENADAS: no se ven los marcadores de esquina"
+        return None
+
+    def _ciego_ms(self) -> int:
+        if self._ciego_desde is None:
+            return 0
+        return max(0, int(round((self._reloj() - self._ciego_desde) * 1000.0)))
+
     def _entrar(self, destino: str) -> None:
+        if destino == "READY":
+            # Los apagones se cuentan por ronda: la que empieza arranca limpia.
+            self._perdidas = 0
+            self._peor_ceguera_ms = 0
+            self._tuvo_geometria = self._geometria_ok
         duraciones = {"READY": self._cfg.ronda.preparacion_ms,
                       "RUNNING": self._cfg.ronda.duracion_ms}
         self._fase = destino
@@ -344,7 +512,7 @@ def abrir_fuente(cfg: ConfigVision, args):
     no la necesitan: representan el cuadro ya rectificado a propósito.
     """
     if args.sintetico:
-        return FuenteSintetica(cfg), "IMÁGENES GENERADAS (sin cámara)"
+        return FuenteSintetica(cfg), "IMÁGENES GENERADAS (sin cámara)", None
 
     camara = FuenteCamara(cfg.camara, indice=args.indice)
     primero, limite = None, time.monotonic() + 10.0
@@ -358,11 +526,23 @@ def abrir_fuente(cfg: ConfigVision, args):
 
     perfil = elegir_perfil(cfg.calibracion, BASE_VISION, ancho, alto,
                            nombre=args.camara, interactivo=sys.stdin.isatty())
-    print(comparar_con_camara(perfil, ancho, alto).mensaje())
+    compat = comparar_con_camara(perfil, ancho, alto)
+    print(compat.mensaje())
     rectificador = Rectificador(perfil, alpha=cfg.calibracion.alpha, tamano=(ancho, alto))
     fuente = FuenteRectificada(camara, rectificador)
     fuente.matriz_camara = rectificador.matriz_nueva  # la que necesita la pose
-    return fuente, "cámara {} ({}x{})".format(perfil.camara, ancho, alto)
+    # El diagnóstico del perfil se DEVUELVE, no solo se imprime: como observador
+    # el sistema sigue con un perfil dudoso —a veces uno quiere aplicar un perfil
+    # ajeno justo para comprobar que está mal— pero como árbitro tiene que poder
+    # negarse, y el acta tiene que decir con qué perfil se juzgó.
+    return fuente, "cámara {} ({}x{})".format(perfil.camara, ancho, alto), {
+        "camara": perfil.camara,
+        "nivel": compat.nivel,
+        "motivo": compat.motivo,
+        # Solo la relación de aspecto deforma por sí sola. Un perfil escalado
+        # —`sospechoso`— anda y pierde precisión, así que avisa y deja arbitrar.
+        "deforma": compat.nivel == "incompatible",
+    }
 
 
 def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descartados, duplicados,
@@ -501,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = cargar_config(args.config)
     try:
-        fuente, descripcion = abrir_fuente(cfg, args)
+        fuente, descripcion, perfil_info = abrir_fuente(cfg, args)
     except (ErrorCamara, ErrorCalibracion) as exc:
         print("ERROR: {}".format(exc), file=sys.stderr)
         return 2
@@ -510,7 +690,13 @@ def main(argv: list[str] | None = None) -> int:
     if matriz is None:  # fuente sintética: la matriz es la de su propia cámara
         matriz = fuente.verdad.camara.matriz
 
-    arbitro = Arbitro(cfg, args.fase)
+    # `--fase READY` ya no entra en READY de una: preparar una ronda exige ver la
+    # cancha, y al construir el árbitro todavía no hubo un solo cuadro. Queda
+    # como INTENCIÓN, y el bucle la cumple en cuanto haya coordenadas. Así el
+    # atajo sigue existiendo sin saltear la guarda.
+    preparar_al_arrancar = args.fase == "READY"
+    arbitro = Arbitro(cfg, "IDLE",
+                      perfil_bloquea=bool(perfil_info and perfil_info["deforma"]))
     seguidor = Seguidor(cfg)
     contador = ContadorAcopio(cfg)
     anclaje = AnclajeCancha(cfg)
@@ -581,12 +767,6 @@ def main(argv: list[str] | None = None) -> int:
                 time.sleep(0.005)
                 continue
             cuadros += 1
-            # El reloj de la ronda avanza con los cuadros y no en un temporizador
-            # aparte: una ronda que sigue corriendo sin que la cámara vea nada no
-            # es una ronda, es un cronómetro solo.
-            aviso_fase = arbitro.tictac()
-            if aviso_fase:
-                print("[fase] " + aviso_fase, flush=True)
             sistema_actual = None
             # ---- falla abierto -------------------------------------------
             # Si un cuadro no se puede procesar, NO se toca la casilla y se
@@ -630,6 +810,26 @@ def main(argv: list[str] | None = None) -> int:
                 fallos += 1
                 ultimo_error = "{}: {}".format(type(exc).__name__, exc)
 
+            # ---- el reloj de la ronda ------------------------------------
+            # Va DESPUÉS de procesar el cuadro, para que el árbitro decida con
+            # la geometría de este cuadro y no con la del anterior. Un sistema
+            # de coordenadas armado —aunque sea con tres marcadores y la
+            # homografía conservada— es lo que cuenta como "ve la cancha".
+            aviso_fase = arbitro.tictac(sistema_actual is not None)
+            if aviso_fase:
+                print("[fase] " + aviso_fase, flush=True)
+
+            # `--fase READY` es una intención, no un atajo: se cumple en cuanto
+            # hay coordenadas, pasando por la misma guarda que la tecla `r`.
+            if preparar_al_arrancar:
+                respuesta = arbitro.intentar("ready")
+                if arbitro.fase == "READY":
+                    preparar_al_arrancar = False
+                    print("[fase] " + respuesta, flush=True)
+                elif cuadros % 150 == 0:  # cada ~5 s, para no inundar
+                    print("[fase] esperando para preparar la ronda: {}".format(
+                        arbitro.por_que_no_puede_arbitrar()), flush=True)
+
             # ---- el acta -------------------------------------------------
             # Va acá, fuera del try del cuadro, para que se escriba aunque el
             # cuadro que cerró la ronda haya fallado: la ronda terminó igual.
@@ -651,18 +851,32 @@ def main(argv: list[str] | None = None) -> int:
                                                    and fase_previa == "IDLE"):
                     # Un consumidor que falla no puede tumbar nada: se avisa y
                     # se sigue. Un disco lleno no arruina una competencia.
-                    try:
-                        ruta = escribir_acta(
-                            cfg,
-                            motivo=arbitro.motivo or "desconocido",
-                            tiempo_final_ms=arbitro.tiempo_final_ms,
-                            acopio=acopio, estado=ultimo_estado, arranque=arranque)
-                        print("[acta] ronda cerrada por {} · tiempo {} · acta en {}".format(
-                            arbitro.motivo, mmss(arbitro.tiempo_final_ms), ruta), flush=True)
-                    except Exception as exc:  # noqa: BLE001 — a propósito
-                        print("[acta] NO SE PUDO ESCRIBIR EL ACTA: {}: {}. La ronda "
-                              "terminó igual, pero no queda constancia.".format(
-                                  type(exc).__name__, exc), flush=True)
+                    if not arbitro.tuvo_geometria:
+                        # Sin coordenadas no hay acta, en ninguna circunstancia.
+                        # Un documento que parece válido y no lo es es peor que
+                        # no tener documento.
+                        print("[acta] SIN ACTA: la ronda terminó sin que el sistema "
+                              "llegara a ver la cancha. No hay nada que certificar.",
+                              flush=True)
+                    else:
+                        try:
+                            ruta = escribir_acta(
+                                cfg,
+                                motivo=arbitro.motivo or "desconocido",
+                                tiempo_final_ms=arbitro.tiempo_final_ms,
+                                tuvo_geometria=True,
+                                acopio=acopio, estado=ultimo_estado, arranque=arranque,
+                                sintetico=args.sintetico,
+                                perfil=perfil_info,
+                                perdidas_geometria=arbitro.perdidas_geometria,
+                                peor_ceguera_ms=arbitro.peor_ceguera_ms)
+                            print("[acta] ronda cerrada por {} · tiempo {} · acta en {}".format(
+                                arbitro.motivo, mmss(arbitro.tiempo_final_ms), ruta),
+                                flush=True)
+                        except Exception as exc:  # noqa: BLE001 — a propósito
+                            print("[acta] NO SE PUDO ESCRIBIR EL ACTA: {}: {}. La ronda "
+                                  "terminó igual, pero no queda constancia.".format(
+                                      type(exc).__name__, exc), flush=True)
                     arranque = ()
 
             # ---- la vista ------------------------------------------------
@@ -674,6 +888,10 @@ def main(argv: list[str] | None = None) -> int:
                 vista.dibujar(cuadro.imagen, sistema_actual, ultimo_estado, {
                     "fase": fase_panel, "reloj": reloj_panel,
                     "motivo": arbitro.motivo, "sintetico": args.sintetico,
+                    "geometria_ok": arbitro.geometria_ok,
+                    "ciego_ms": arbitro.ciego_ms,
+                    "limite_ceguera_ms": cfg.ronda.geometria_perdida_ms,
+                    "impedimento": arbitro.impedimento_corto,
                     "clientes": publicador.clientes, "emitidos": publicador.emitidos,
                     "acopio": acopio,
                     "fps": fuente.fps_real, "fallos": fallos,

@@ -540,6 +540,21 @@ FINISHED ──ready──▶ READY        FINISHED ──abort──▶ IDLE
   cronómetro se detiene con el tiempo que tomó el reto.
 - Las demás las hace una persona operando el sistema.
 
+### Por qué una ronda puede no arrancar
+
+La visión **no prepara ni arranca una ronda si no ve la cancha**. Si no se
+distinguen los marcadores de esquina, se queda donde está y lo dice en pantalla:
+un árbitro no puede juzgar lo que no ve. Puede pasar también que la preparación
+llegue a cero sin coordenadas; en ese caso la ronda **espera** a que vuelvan y
+arranca ahí, sin devolverle a nadie el tiempo de preparación ya consumido.
+
+Y si durante la ronda el sistema se queda sin ver la cancha más de un par de
+segundos seguidos, la ronda **se cierra** con motivo `geometria_perdida`.
+
+Para ustedes esto se ve en `phase` y `clock`, como todo lo demás: la fase no
+cambia, o cambia a `FINISHED` antes de tiempo. No hay un campo aparte que lo
+explique.
+
 ### Cuándo se toma el tiempo del reto
 
 Cuando el último cubo **entra** en su zona, no cuando el sistema termina de

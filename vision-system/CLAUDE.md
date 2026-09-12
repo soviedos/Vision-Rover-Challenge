@@ -95,6 +95,28 @@ Vision-Rover-Challenge/          # raíz del repositorio (fork)
   **Nunca encolar telemetría vieja.**
 - Cada mensaje lleva **número de secuencia** y **marca de tiempo de captura**.
 
+### Los dos oficios: observar y arbitrar
+
+El sistema hace **dos trabajos distintos**, y lo que es correcto en uno es un
+error en el otro. Esta es la regla que decide los casos límite, no el
+razonamiento de uno solo de ellos.
+
+| | **Observador** | **Árbitro** |
+|---|---|---|
+| Qué produce | telemetría | un veredicto |
+| Ante la duda | **falla abierto**: publica lo último bueno, marcado con su edad | **se niega**: no hay veredicto "más o menos" |
+| Un dato imperfecto | vale más que un agujero, si va marcado | no vale |
+| Quién lo consume | los rovers, que pueden decidir con datos viejos | una persona, que va a firmar un resultado |
+
+**Consecuencia práctica:** todo lo que para observar es *desaconsejable* —un
+perfil de cámara que no corresponde, no ver los marcadores, datos sintéticos—
+para arbitrar es *impedimento*. La puerta donde se cobran esas condiciones es la
+**entrada en READY**, y la transición automática a RUNNING tiene la misma
+guarda: si no, la ronda arrancaría a ciegas por la puerta de atrás.
+
+Corolario: **un documento que parece válido y no lo es es peor que no tener
+documento.** De ahí que no se escriba acta de una ronda sin geometría.
+
 ### Árbitro y fases
 - La **visión es árbitro de verdad**: expone un campo de **fase**
   (`IDLE` / `READY` / `RUNNING` / `FINISHED`), lleva el **cronómetro oficial** y

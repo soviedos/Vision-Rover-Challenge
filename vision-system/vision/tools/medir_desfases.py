@@ -74,7 +74,10 @@ try:  # como paquete
         diferencia_angular,
         normalizar_grados,
     )
-    from ..geometry.coordenadas import ErrorGeometria, construir_sistema, detectar_marcadores
+    from ..geometry.coordenadas import (
+        ErrorDuplicado, ErrorGeometria, construir_sistema, detectar_marcadores_crudo,
+        pose_camara, resolver_duplicados,
+    )
     from ..geometry.distorsion import (
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
@@ -90,7 +93,8 @@ except ImportError:  # como script suelto
         detectar_rovers, diferencia_angular, normalizar_grados,
     )
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
-        ErrorGeometria, construir_sistema, detectar_marcadores,
+        ErrorDuplicado, ErrorGeometria, construir_sistema, detectar_marcadores_crudo,
+        pose_camara, resolver_duplicados,
     )
     from vision.geometry.distorsion import (  # type: ignore[no-redef]
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
@@ -603,9 +607,22 @@ def simular_giro(cfg, adelante_mm, izquierda_mm, desfase_angular, centro_celda,
         phi = normalizar_grados(theta - desfase_angular)
         rover = RoverDemo(id=10, col=float(posicion[0]), row=float(posicion[1]), theta=phi)
 
-        imagen, _ = generar(cfg, rovers=(rover,), perspectiva=persp)
-        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
-        sistema = construir_sistema(imagen, cfg, detectados)
+        imagen, verdad = generar(cfg, rovers=(rover,), perspectiva=persp)
+        crudos = detectar_marcadores_crudo(imagen, cfg.marcadores_esquina.nombre_diccionario)
+
+        # OpenCV detecta el marcador del rover DOS VECES en uno de cada
+        # veinticuatro cuadros con perspectiva: el bueno de 41,5 mm y un
+        # fantasma de 123,5 mm casi en el mismo lugar. Antes, el diccionario por
+        # ID se quedaba con uno de los dos según el orden del barrido y sin
+        # avisar, y esta autoprueba pasaba por casualidad. Se resuelve igual que
+        # en el sistema: midiendo los candidatos contra lo que se espera del
+        # marcador. La posición no los separa —están a 0,2 celdas— pero el
+        # tamaño sí, por un factor de tres.
+        esquinas = {i: e for i, e in crudos if i in cfg.marcadores_esquina.ids_esperados}
+        sistema = construir_sistema(imagen, cfg, esquinas)
+        pose = pose_camara(sistema, verdad.camara.matriz)
+        detectados, _ = resolver_duplicados(
+            crudos, cfg, sistema, {rover.id: (rover.col, rover.row)}, pose_rover=pose)
         vistos = detectar_rovers(detectados, sistema, cfg)
         if not vistos:
             continue
@@ -731,12 +748,25 @@ def autoprueba_media_circular() -> bool:
 
 
 def _pose_del_rover(imagen, cfg, id_rover):
-    """Devuelve la pose del marcador del rover pedido, o None."""
-    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+    """Devuelve la pose del marcador del rover pedido, o None.
+
+    Un ID duplicado en el cuadro —el marcador del rover detectado dos veces, o
+    un fantasma de la cuadrícula con su mismo ID— **no se resuelve a ciegas**:
+    se miden los candidatos contra lo que se espera del marcador y, si no se
+    puede decidir, se **saltea la muestra**. Una muestra de menos no cuesta
+    nada: se capturan veinticuatro. Una muestra con la pose de un fantasma
+    contamina el ajuste del desfase, que es justo lo que se está midiendo.
+    """
+    crudos = detectar_marcadores_crudo(imagen, cfg.marcadores_esquina.nombre_diccionario)
+    esquinas = {i: e for i, e in crudos if i in cfg.marcadores_esquina.ids_esperados}
     try:
-        sistema = construir_sistema(imagen, cfg, detectados)
+        sistema = construir_sistema(imagen, cfg, esquinas)
     except ErrorGeometria:
-        return None, detectados, None
+        return None, esquinas, None
+    try:
+        detectados, _ = resolver_duplicados(crudos, cfg, sistema)
+    except ErrorDuplicado:
+        return None, esquinas, sistema
     for rover in detectar_rovers(detectados, sistema, cfg):
         if rover.id == id_rover:
             return rover.marcador, detectados, sistema

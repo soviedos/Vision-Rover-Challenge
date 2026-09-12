@@ -32,18 +32,27 @@ import numpy as np
 try:  # como paquete
     from ..configuracion import Perspectiva, cargar_config
     from ..geometry.coordenadas import (
-        AnclajeCancha, ErrorGeometria, construir_sistema, detectar_marcadores,
+        AnclajeCancha, ErrorDuplicado, ErrorGeometria, construir_sistema,
+        detectar_marcadores, detectar_marcadores_crudo, lado_mm_de, pose_camara,
+        resolver_duplicados,
     )
-    from ..sources.generador_sintetico import generar
+    from ..sources.generador_sintetico import MarcadorExtra, generar
 except ImportError:  # como script suelto
     from vision.configuracion import Perspectiva, cargar_config  # type: ignore[no-redef]
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
         AnclajeCancha,
+        ErrorDuplicado,
         ErrorGeometria,
         construir_sistema,
         detectar_marcadores,
+        detectar_marcadores_crudo,
+        lado_mm_de,
+        pose_camara,
+        resolver_duplicados,
     )
-    from vision.sources.generador_sintetico import generar  # type: ignore[no-redef]
+    from vision.sources.generador_sintetico import (  # type: ignore[no-redef]
+        MarcadorExtra, generar,
+    )
 
 
 def puntos_de_prueba(cols: int, rows: int, verdad) -> list[tuple[str, np.ndarray]]:
@@ -274,6 +283,119 @@ def verificar_degradacion(cfg, umbral_mm: float) -> bool:
     return todo_bien
 
 
+def verificar_duplicados(cfg, umbral_mm: float) -> bool:
+    """Dos marcadores con el MISMO ID en un cuadro: ¿se resuelve o se descarta?
+
+    Es el caso que la cancha real produce sola y a destiempo: un fantasma que
+    decodifica como el 10 no se suma al rover 10, **colisiona** con él. Medido
+    sobre la cancha, el ID 10 apareció 46 veces en dos minutos con el rover
+    retirado del tablero.
+
+    Antes de esto, el diccionario por ID se quedaba con uno de los dos según el
+    orden en que OpenCV barrió la imagen, sin avisar. Si ganaba el fantasma, el
+    rover se publicaba un cuadro en cualquier parte **con edad cero**, o sea
+    presentado como fresco; si el ID repetido era el de una esquina, la
+    homografía se rearmaba con un marcador falso y **todas** las coordenadas
+    salían mal en silencio.
+
+    Se verifican las dos salidas posibles, porque las dos son correctas en su
+    caso:
+
+    - **resolver**, cuando uno de los candidatos es claramente el bueno. No
+      alcanza con descartar el cuadro: en cada ronda hay un marcador real 10 y
+      del orden de veintitrés fantasmas 10 por minuto chocando contra él, así
+      que descartar tiraría más del 1 % de los cuadros por algo que el sistema
+      puede resolver solo;
+    - **descartar**, cuando los dos candidatos son igual de plausibles. Ahí
+      elegir es adivinar, y el falla-abierto conserva el último estado bueno.
+
+    Los marcadores extra los dibuja el generador a pedido (`MarcadorExtra`):
+    esperar a que la cancha real produzca el caso sería depender de la suerte.
+    """
+    print("=" * 78)
+    print("IDS DUPLICADOS: dos marcadores distintos con el mismo ID")
+    print("=" * 78)
+
+    persp = Perspectiva(activa=True,
+                        inclinacion_grados=cfg.sintetico.perspectiva.inclinacion_grados)
+    limpio, verdad = generar(cfg, perspectiva=persp)
+    sistema_guardado = construir_sistema(limpio, cfg)
+    pose = pose_camara(sistema_guardado, verdad.camara.matriz)
+    altura = cfg.paralaje.altura_marcador_rover_mm
+    dicc = cfg.marcadores_esquina.nombre_diccionario
+    # La memoria que tendría el seguimiento: la posición ya corregida.
+    memoria = {r.id: (r.col, r.row) for r in cfg.rovers_demo}
+    esperado_rover = cfg.elementos.marcador_rover.lado_mm * pose.factor_paralaje(altura)
+
+    celdas = np.array([[verdad.cols * fx, verdad.rows * fy]
+                       for fy in np.linspace(.15, .85, 5) for fx in np.linspace(.15, .85, 5)])
+
+    print("  un marcador de esquina mide {:.0f} mm y el del rover {:.1f} con paralaje;".format(
+        cfg.marcadores_esquina.lado_mm, esperado_rover))
+    print("  los fantasmas medidos en la cancha real miden de 13 a 18 mm.\n")
+    print("  {:<48} {:>10} {:>12}  {}".format(
+        "situación", "esperado", "ganador mm", "estado"))
+    print("  " + "-" * 86)
+
+    id_rover = sorted(cfg.rovers_demo, key=lambda r: r.id)[0].id
+    rover = next(r for r in cfg.rovers_demo if r.id == id_rover)
+
+    # El caso ambiguo se arma SIN el rover real, y no es un detalle de montaje:
+    # con el rover en la cancha el caso deja de ser ambiguo, porque uno de los
+    # tres candidatos está justo donde el seguimiento lo recuerda y gana limpio.
+    # Los dos gemelos van simétricos respecto de esa memoria: misma altura, mismo
+    # tamaño, misma distancia. Ahí no hay nada que mire el sistema que los
+    # separe, y esa es exactamente la situación en la que tiene que negarse.
+    casos = (
+        ("fantasma de 30 mm con el ID del rover {}".format(id_rover),
+         (MarcadorExtra(id=id_rover, col=30.0, row=20.0, lado_celdas=1.5),),
+         True, esperado_rover, None),
+        ("fantasma de 30 mm con el ID de la esquina 0",
+         (MarcadorExtra(id=0, col=20.0, row=20.0, lado_celdas=1.5),),
+         True, cfg.marcadores_esquina.lado_mm, None),
+        ("dos gemelos con el ID del rover {}, sin el rover".format(id_rover),
+         (MarcadorExtra(id=id_rover, col=rover.col + 3.5, row=rover.row,
+                        lado_celdas=2.0, altura_mm=altura),
+          MarcadorExtra(id=id_rover, col=rover.col - 3.5, row=rover.row,
+                        lado_celdas=2.0, altura_mm=altura)),
+         False, None, ()),
+    )
+
+    todo_bien = True
+    for nombre, extras, debe_resolver, lado_esperado, rovers in casos:
+        imagen, _ = generar(cfg, rovers=rovers, perspectiva=persp, marcadores_extra=extras)
+        crudos = detectar_marcadores_crudo(imagen, dicc)
+        repetido = extras[0].id
+        cuantos = sum(1 for i, _ in crudos if i == repetido)
+        if cuantos < 2:
+            print("  {:<48} {:>10} {:>12}  {}".format(
+                nombre, "—", "—", "NO SE PUDO PROBAR: el fantasma no se detectó"))
+            todo_bien = False
+            continue
+        try:
+            marcadores, dups = resolver_duplicados(
+                crudos, cfg, sistema_guardado, memoria, pose_rover=pose)
+            ganador = lado_mm_de(marcadores[repetido], sistema_guardado)
+            paso = debe_resolver and abs(ganador - lado_esperado) <= 0.2 * lado_esperado
+            if paso and repetido in cfg.marcadores_esquina.ids_esperados:
+                # El caso grave: si hubiera ganado el fantasma, la homografía se
+                # rearmaría con él y el error se dispararía. Se comprueba.
+                sistema = construir_sistema(imagen, cfg, marcadores)
+                peor, _ = medir(verdad, sistema, celdas)
+                paso = peor * verdad.cell_mm <= umbral_mm
+            print("  {:<48} {:>10} {:>12.1f}  {}".format(
+                nombre, "resuelve", ganador,
+                "OK" if paso else ("GANÓ EL FANTASMA" if debe_resolver else "DEBIÓ DESCARTAR")))
+        except ErrorDuplicado:
+            paso = not debe_resolver
+            print("  {:<48} {:>10} {:>12}  {}".format(
+                nombre, "descarta", "—", "OK" if paso else "DESCARTÓ UN CASO RESOLUBLE"))
+        todo_bien = todo_bien and paso
+
+    print("\n  resultado: {}\n".format("TODO OK" if todo_bien else "HAY FALLAS"))
+    return todo_bien
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verifica el sistema de coordenadas contra la verdad del generador sintético."
@@ -302,6 +424,7 @@ def main(argv: list[str] | None = None) -> int:
         resultados.append(correr_modo(cfg, con_persp, args.umbral_mm, salida, args.anotar))
     if args.modo == "ambos":
         resultados.append(verificar_degradacion(cfg, args.umbral_mm))
+        resultados.append(verificar_duplicados(cfg, args.umbral_mm))
 
     print("=" * 78)
     print("RESULTADO GENERAL: {}".format("TODO OK" if all(resultados) else "HAY FALLAS"))

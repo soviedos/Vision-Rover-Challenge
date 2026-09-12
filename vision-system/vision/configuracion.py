@@ -87,6 +87,23 @@ class MarcadoresEsquina:
 
 
 @dataclass(frozen=True, slots=True)
+class DeteccionMarcadores:
+    """Qué se hace con la salida cruda del detector de ArUco.
+
+    En particular, qué se hace cuando **dos marcadores distintos decodifican el
+    mismo ID** en un cuadro. Antes ganaba el último que devolviera OpenCV, sin
+    avisar; ahora se resuelve por plausibilidad y, si no se puede resolver, se
+    descarta el cuadro.
+
+    `margen_decision_duplicados` es un margen **relativo**, no un umbral físico:
+    cuánto mejor tiene que ser el mejor candidato que el segundo para quedarse
+    con el ID. Por eso no depende de la cancha ni de la cámara.
+    """
+
+    margen_decision_duplicados: float
+
+
+@dataclass(frozen=True, slots=True)
 class Cubos:
     """Medidas físicas de los cubos. CONFIRMADAS.
 
@@ -579,6 +596,7 @@ class Precision:
 class ConfigVision:
     tablero: Tablero
     marcadores_esquina: MarcadoresEsquina
+    deteccion_marcadores: DeteccionMarcadores
     elementos: Elementos
     lugares: Lugares
     conteo_acopio: ConteoAcopio
@@ -739,6 +757,11 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
         desvio_maximo_mm=float(m["desvio_maximo_mm"]),
     )
 
+    deteccion_marcadores = DeteccionMarcadores(
+        margen_decision_duplicados=float(
+            d["deteccion_marcadores"]["margen_decision_duplicados"]),
+    )
+
     elementos = _leer_elementos(d["elementos"])
 
     sg = d["seguimiento"]
@@ -872,6 +895,7 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     cfg = ConfigVision(
         tablero=tablero,
         marcadores_esquina=marcadores,
+        deteccion_marcadores=deteccion_marcadores,
         elementos=elementos,
         lugares=lugares,
         conteo_acopio=conteo_acopio,
@@ -1112,6 +1136,14 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         return (
             "marcadores_esquina.borde_blanco_mm debe ser > 0: sin zona blanca alrededor "
             "el detector de ArUco no encuentra el marcador"
+        )
+    margen = cfg.deteccion_marcadores.margen_decision_duplicados
+    if not (0.0 < margen < 1.0):
+        return (
+            "deteccion_marcadores.margen_decision_duplicados = {} tiene que estar en (0, 1): "
+            "es cuánto MEJOR tiene que ser el mejor candidato que el segundo, como "
+            "fracción. En 1 o más, cualquier candidato ganaría y el duplicado nunca sería "
+            "ambiguo; en 0 o menos, ninguno ganaría nunca".format(margen)
         )
     cub = cfg.elementos.cubos
     if cub.lado_mm <= 0:

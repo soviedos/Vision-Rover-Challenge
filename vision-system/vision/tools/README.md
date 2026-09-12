@@ -47,6 +47,31 @@ blanca, que es exactamente cómo se pierde un marcador en la cancha real—.
 El detalle de por qué con tres se conserva en vez de reajustar está en
 [`../geometry/README.md`](../geometry/README.md).
 
+#### Y un cuarto bloque: los IDs duplicados
+
+Dos marcadores distintos que decodifican el **mismo ID** en un cuadro. La cancha
+real lo produce sola: medido, el ID 10 —que es un ID de rover— apareció 46 veces
+en dos minutos con el rover retirado del tablero.
+
+| Situación | Qué se exige |
+|---|---|
+| Fantasma de 30 mm con el ID de un rover | **resuelve**: gana el de 41,8 mm |
+| Fantasma de 30 mm con el ID de una esquina | **resuelve**, y la homografía sigue dando 0,52 mm |
+| Dos marcadores idénticos con el ID de un rover, sin el rover | **descarta el cuadro** |
+
+Las dos salidas son correctas en su caso. Resolver, porque en cada ronda hay un
+marcador real 10 y del orden de veintitrés fantasmas 10 por minuto chocando
+contra él: descartar tiraría más del 1 % de los cuadros por algo que el sistema
+puede decidir midiendo. Descartar, cuando los candidatos son igual de
+plausibles, porque ahí elegir es adivinar.
+
+> **El caso ambiguo se arma SIN el rover real, y no es un detalle de montaje.**
+> Con el rover en la cancha el caso deja de ser ambiguo: uno de los tres
+> candidatos está justo donde el seguimiento lo recuerda y gana limpio.
+
+Los marcadores extra los dibuja el generador a pedido (`MarcadorExtra`): esperar
+a que la cancha real produzca el caso sería depender de la suerte.
+
 ### `verificar_rovers.py`
 
 Verifica la **detección de rovers** contra la misma verdad conocida: genera

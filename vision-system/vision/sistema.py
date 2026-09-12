@@ -48,7 +48,8 @@ try:  # como paquete
     from .detectors.cubos import detectar_cubos
     from .detectors.rovers import detectar_rovers
     from .geometry.coordenadas import (
-        AnclajeCancha, ErrorGeometria, detectar_marcadores, pose_camara,
+        AnclajeCancha, ErrorDuplicado, ErrorGeometria, detectar_marcadores_crudo,
+        pose_camara, resolver_duplicados,
     )
     from .geometry.distorsion import (
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
@@ -68,7 +69,8 @@ except ImportError:  # como script suelto
     from vision.detectors.cubos import detectar_cubos  # type: ignore[no-redef]
     from vision.detectors.rovers import detectar_rovers  # type: ignore[no-redef]
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
-        AnclajeCancha, ErrorGeometria, detectar_marcadores, pose_camara,
+        AnclajeCancha, ErrorDuplicado, ErrorGeometria, detectar_marcadores_crudo,
+        pose_camara, resolver_duplicados,
     )
     from vision.geometry.distorsion import (  # type: ignore[no-redef]
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
@@ -166,14 +168,23 @@ def abrir_fuente(cfg: ConfigVision, args):
     return fuente, "cámara {} ({}x{})".format(perfil.camara, ancho, alto)
 
 
-def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados):
+def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, duplicados):
     """De un cuadro al estado del mundo. Lanza si la geometría no se puede armar.
 
     Una sola pasada del detector de ArUco por cuadro: el mismo resultado sirve
     para armar las coordenadas y para encontrar los rovers.
 
+    La detección se toma **cruda**, sin colapsar por ID, porque el diccionario
+    por ID destruye el caso peligroso antes de que nadie lo mire: dos marcadores
+    que dicen ser el mismo rover. `resolver_duplicados` decide cuál es el bueno
+    midiéndolos contra lo que el sistema ya sabe —cuánto mide ese marcador y
+    dónde estaba— y lanza si no puede decidir.
+
     `descartados` es un conjunto que se va llenando con los IDs vistos que no son
-    ni esquina ni rover declarado, para poder informarlos.
+    ni esquina ni rover declarado, para poder informarlos. `duplicados` es una
+    lista que acumula los IDs repetidos que sí se pudieron resolver: no son un
+    no-evento, son fantasmas que estuvieron a punto de pisar un marcador de
+    verdad, y su cuenta es la que dice si el problema se agrava.
 
     Devuelve `(sistema de coordenadas, estado del mundo)`. El sistema se devuelve
     porque la vista lo necesita para dibujar celdas sobre la imagen; el estado es
@@ -187,7 +198,23 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados):
     hubo un cuadro. Es lo correcto: un cuadro que no se pudo procesar no es una
     observación, y la edad de todos los objetos tiene que seguir creciendo.
     """
-    detectados = detectar_marcadores(cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario)
+    crudos = detectar_marcadores_crudo(
+        cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario)
+    # Lo que se espera del marcador de un rover no es una constante: está a 90 mm
+    # del tablero, así que se ve más grande Y corrido hacia afuera. Las dos cosas
+    # salen de la pose deducida de la geometría GUARDADA —la de este cuadro
+    # todavía no existe, y justamente uno de los candidatos en disputa podría ser
+    # el que la arme—.
+    pose_guardada = None
+    if anclaje.sistema is not None:
+        try:
+            pose_guardada = pose_camara(anclaje.sistema, matriz_camara)
+        except ErrorGeometria:
+            pose_guardada = None
+    detectados, repetidos = resolver_duplicados(
+        crudos, cfg, anclaje.sistema, seguidor.ultimas_poses_rover(),
+        pose_rover=pose_guardada)
+    duplicados.extend(repetidos)
     # Marcadores que no son ni esquina ni rover declarado. Casi siempre son
     # detecciones falsas de la cuadrícula del tablero, pero también serían un
     # rover que alguien pegó y nadie declaró: por eso se cuentan y se informan
@@ -255,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
     contador = ContadorAcopio(cfg)
     anclaje = AnclajeCancha(cfg)
     descartados: set[int] = set()
+    duplicados: list = []
+    duplicados_totales = ambiguos = 0
     vista = None
     if args.ventana:
         # La vista es un CONSUMIDOR: solo lee. Si se apaga, el sistema sigue
@@ -316,7 +345,8 @@ def main(argv: list[str] | None = None) -> int:
             # que envejece a la vista de todos. El sistema no se calla nunca.
             try:
                 sistema_actual, estado = procesar(
-                    cuadro, cfg, matriz, arbitro.fase, seguidor, anclaje, descartados)
+                    cuadro, cfg, matriz, arbitro.fase, seguidor, anclaje, descartados,
+                    duplicados)
                 publicador.actualizar(estado)
                 ultimo_estado = estado
                 # El conteo va DESPUÉS de publicar y en su propio try: es para
@@ -327,6 +357,14 @@ def main(argv: list[str] | None = None) -> int:
                     acopio = contador.actualizar(estado, estado.ts_ms)
                 except Exception as exc:  # noqa: BLE001 — a propósito
                     ultimo_error = "acopio: {}: {}".format(type(exc).__name__, exc)
+            except ErrorDuplicado as exc:
+                # Un duplicado que NO se pudo resolver. Se descarta el cuadro y
+                # el falla-abierto conserva el último estado bueno: entre dos
+                # candidatos igual de plausibles, elegir sería adivinar, y una
+                # posición inventada vale menos que un dato viejo marcado.
+                ambiguos += 1
+                fallos += 1
+                ultimo_error = str(exc).split(".")[0]
             except ErrorGeometria as exc:
                 fallos += 1
                 ultimo_error = str(exc).split(".")[0]
@@ -354,14 +392,33 @@ def main(argv: list[str] | None = None) -> int:
                 proximo_informe += 5.0
                 edad = publicador.edad_del_estado_ms()
                 print("[estado] fase={} cuadros={} fallos={} emitidos={} clientes={} "
-                      "pisados={} fps={:.1f} edad={} conservados={}/{} acopio={}".format(
+                      "pisados={} fps={:.1f} edad={} conservados={}/{} acopio={} "
+                      "duplicados={}".format(
                           arbitro.fase, cuadros, fallos, publicador.emitidos,
                           publicador.clientes, publicador.pisados, fuente.fps_real,
                           "{} ms".format(edad) if edad is not None else "sin estado",
                           seguidor.conservados_rover, seguidor.conservados_cubo,
                           "{}/{}".format(acopio.en_posicion, acopio.total)
-                          if acopio is not None else "sin datos"),
+                          if acopio is not None else "sin datos",
+                          duplicados_totales + len(duplicados)),
                       flush=True)
+                if duplicados or ambiguos:
+                    duplicados_totales += len(duplicados)
+                    porid: dict[int, int] = {}
+                    for d in duplicados:
+                        porid[d.id] = porid.get(d.id, 0) + 1
+                    print("[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: {}. "
+                          "Un fantasma con el ID de un marcador de verdad lo pisaría en "
+                          "silencio; se resolvieron {} midiendo los candidatos y {} "
+                          "cuadros se descartaron por no poder decidir. Ejemplo: {}".format(
+                              sorted(porid) or "—", len(duplicados), ambiguos,
+                              "{} con lados de {} mm, ganó {:.1f}".format(
+                                  duplicados[-1].id,
+                                  ", ".join("{:.1f}".format(x) for x in duplicados[-1].lados_mm),
+                                  duplicados[-1].ganador_mm)
+                              if duplicados else "—"), flush=True)
+                    duplicados.clear()
+                    ambiguos = 0
                 if descartados:
                     print("[aviso] marcadores vistos que NO son ni esquina ni rover "
                           "declarado, y por eso se descartan: {}. Si alguno es un robot "

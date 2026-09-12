@@ -153,6 +153,18 @@ class Seguidor:
                 del memoria[k]
                 self.barridos += 1
 
+    def ultimas_poses_rover(self) -> dict[int, tuple[float, float]]:
+        """La última posición buena de cada rover, en celdas.
+
+        La usa la resolución de IDs duplicados: cuando dos marcadores dicen ser
+        el rover 10, el que está cerca de donde el rover 10 estaba hace 33 ms es
+        el rover 10, y el que apareció en la otra punta de la cancha es un
+        fantasma. Es la misma memoria que ya existe para la edad —no se guarda
+        nada nuevo—, y por eso vive acá y no en el detector: el detector mira un
+        cuadro y no sabe nada del anterior.
+        """
+        return {id_rover: (r.col, r.row) for id_rover, r in self._rovers.items()}
+
     @property
     def edades_ms(self) -> dict[str, int]:
         """Las edades actuales, para el diagnóstico. No se publica desde acá."""

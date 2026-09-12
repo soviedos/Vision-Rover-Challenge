@@ -608,7 +608,8 @@ def simular_giro(cfg, adelante_mm, izquierda_mm, desfase_angular, centro_celda,
         rover = RoverDemo(id=10, col=float(posicion[0]), row=float(posicion[1]), theta=phi)
 
         imagen, verdad = generar(cfg, rovers=(rover,), perspectiva=persp)
-        crudos = detectar_marcadores_crudo(imagen, cfg.marcadores_esquina.nombre_diccionario)
+        crudos = detectar_marcadores_crudo(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                           cfg.deteccion_marcadores.refinamiento_esquinas)
 
         # OpenCV detecta el marcador del rover DOS VECES en uno de cada
         # veinticuatro cuadros con perspectiva: el bueno de 41,5 mm y un
@@ -757,7 +758,8 @@ def _pose_del_rover(imagen, cfg, id_rover):
     nada: se capturan veinticuatro. Una muestra con la pose de un fantasma
     contamina el ajuste del desfase, que es justo lo que se está midiendo.
     """
-    crudos = detectar_marcadores_crudo(imagen, cfg.marcadores_esquina.nombre_diccionario)
+    crudos = detectar_marcadores_crudo(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                       cfg.deteccion_marcadores.refinamiento_esquinas)
     esquinas = {i: e for i, e in crudos if i in cfg.marcadores_esquina.ids_esperados}
     try:
         sistema = construir_sistema(imagen, cfg, esquinas)

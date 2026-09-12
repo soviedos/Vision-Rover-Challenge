@@ -37,9 +37,38 @@ import cv2
 import numpy as np
 
 try:  # como paquete
-    from ..configuracion import ConfigVision, diccionario_aruco
+    from ..configuracion import REFINAMIENTOS, ConfigVision, diccionario_aruco
 except ImportError:  # como script suelto
-    from vision.configuracion import ConfigVision, diccionario_aruco  # type: ignore[no-redef]
+    from vision.configuracion import (  # type: ignore[no-redef]
+        REFINAMIENTOS, ConfigVision, diccionario_aruco,
+    )
+
+
+def parametros_detector(refinamiento: str = "ninguno"):
+    """Los parámetros con los que corre el detector de ArUco.
+
+    Existe para que el **refinamiento de esquinas** sea configuración y no una
+    constante enterrada en una llamada. De las cuatro esquinas detectadas sale
+    todo lo demás: el centro que ancla las coordenadas, el ángulo del rover y el
+    lado que mide el filtro de plausibilidad, así que media fracción de píxel
+    ahí se propaga a todo.
+
+    El resto de los parámetros queda como los trae OpenCV, a propósito. Con
+    `DICT_4X4_50` la corrección de errores ya está apagada de hecho —el
+    diccionario declara un solo bit corregible, OpenCV lo multiplica por la tasa
+    y trunca, así que con el 0,6 de fábrica el resultado es cero— y bajarla no
+    cambiaría nada. Verificado con el detector: un marcador con un bit volteado
+    no se detecta con la tasa en 0,6 y sí se detecta con la tasa en 1,0.
+    """
+    parametros = cv2.aruco.DetectorParameters()
+    nombre = REFINAMIENTOS.get(refinamiento)
+    if nombre is None:
+        raise ValueError(
+            "refinamiento de esquinas desconocido: {!r}; válidos: {}".format(
+                refinamiento, sorted(REFINAMIENTOS))
+        )
+    parametros.cornerRefinementMethod = getattr(cv2.aruco, nombre)
+    return parametros
 
 
 class ErrorGeometria(Exception):
@@ -112,7 +141,7 @@ class ErrorDuplicado(ErrorGeometria):
 
 
 def detectar_marcadores_crudo(
-    imagen: np.ndarray, nombre_diccionario: str
+    imagen: np.ndarray, nombre_diccionario: str, refinamiento: str = "ninguno"
 ) -> tuple[tuple[int, np.ndarray], ...]:
     """**Todas** las detecciones del cuadro, sin colapsar por ID.
 
@@ -126,7 +155,7 @@ def detectar_marcadores_crudo(
     if imagen.ndim == 3:
         imagen = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
     detector = cv2.aruco.ArucoDetector(
-        diccionario_aruco(nombre_diccionario), cv2.aruco.DetectorParameters()
+        diccionario_aruco(nombre_diccionario), parametros_detector(refinamiento)
     )
     esquinas, ids, _ = detector.detectMarkers(imagen)
     if ids is None:
@@ -137,7 +166,9 @@ def detectar_marcadores_crudo(
     )
 
 
-def detectar_marcadores(imagen: np.ndarray, nombre_diccionario: str) -> dict[int, np.ndarray]:
+def detectar_marcadores(
+    imagen: np.ndarray, nombre_diccionario: str, refinamiento: str = "ninguno"
+) -> dict[int, np.ndarray]:
     """Detecta los marcadores ArUco de la imagen. Lanza si hay un ID repetido.
 
     Devuelve `{id: esquinas}` con las esquinas como (4, 2) en orden TL, TR, BR,
@@ -152,7 +183,8 @@ def detectar_marcadores(imagen: np.ndarray, nombre_diccionario: str) -> dict[int
     """
     marcadores: dict[int, np.ndarray] = {}
     repetidos = []
-    for id_aruco, esquinas in detectar_marcadores_crudo(imagen, nombre_diccionario):
+    for id_aruco, esquinas in detectar_marcadores_crudo(
+            imagen, nombre_diccionario, refinamiento):
         if id_aruco in marcadores:
             repetidos.append(id_aruco)
         marcadores[id_aruco] = esquinas
@@ -755,7 +787,8 @@ def construir_sistema(
     detecta por su cuenta, que es lo que hace falta para usarlo suelto.
     """
     if detectados is None:
-        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                         cfg.deteccion_marcadores.refinamiento_esquinas)
     esperados = cfg.marcadores_esquina.ids_esperados
     faltantes = sorted(esperados - set(detectados))
     if faltantes:

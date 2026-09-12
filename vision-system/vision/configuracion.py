@@ -34,6 +34,16 @@ from contrato import schema  # noqa: E402  (después de tocar sys.path, a propó
 
 CONFIG_POR_DEFECTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config_vision.json")
 
+#: Cómo se afinan las esquinas detectadas de cada marcador. El nombre va en la
+#: configuración y la constante de OpenCV se resuelve acá: el número no le dice
+#: nada a quien edita el archivo, y el nombre además documenta qué se eligió.
+REFINAMIENTOS = {
+    "ninguno": "CORNER_REFINE_NONE",
+    "subpixel": "CORNER_REFINE_SUBPIX",
+    "contorno": "CORNER_REFINE_CONTOUR",
+    "apriltag": "CORNER_REFINE_APRILTAG",
+}
+
 #: Nombres de esquina admitidos y su celda, en función del tamaño de la grilla.
 #: Se usan nombres en vez de números para que la disposición no se rompa al
 #: cambiar `cols`/`rows` cuando se mida la cancha real.
@@ -108,6 +118,7 @@ class DeteccionMarcadores:
     con el ID. Por eso no depende de la cancha ni de la cámara.
     """
 
+    refinamiento_esquinas: str
     tolerancia_tamano: float
     margen_fuera_de_cancha_celdas: float
     margen_decision_duplicados: float
@@ -769,6 +780,7 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
 
     dm = d["deteccion_marcadores"]
     deteccion_marcadores = DeteccionMarcadores(
+        refinamiento_esquinas=str(dm["refinamiento_esquinas"]).lower(),
         tolerancia_tamano=float(dm["tolerancia_tamano"]),
         margen_fuera_de_cancha_celdas=float(dm["margen_fuera_de_cancha_celdas"]),
         margen_decision_duplicados=float(dm["margen_decision_duplicados"]),
@@ -1148,6 +1160,12 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         return (
             "marcadores_esquina.borde_blanco_mm debe ser > 0: sin zona blanca alrededor "
             "el detector de ArUco no encuentra el marcador"
+        )
+    if cfg.deteccion_marcadores.refinamiento_esquinas not in REFINAMIENTOS:
+        return (
+            "deteccion_marcadores.refinamiento_esquinas desconocido: {!r}. Los valores "
+            "válidos son {}".format(
+                cfg.deteccion_marcadores.refinamiento_esquinas, sorted(REFINAMIENTOS))
         )
     tol = cfg.deteccion_marcadores.tolerancia_tamano
     if not (0.0 < tol < 1.0):

@@ -138,7 +138,8 @@ def correr_modo(cfg, con_perspectiva: bool, umbral_mm: float, salida: str | None
         verdad.ancho_px, verdad.alto_px, verdad.cols, verdad.rows, verdad.cell_mm, verdad.px_por_celda))
 
     # --- detección ---------------------------------------------------------
-    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                     cfg.deteccion_marcadores.refinamiento_esquinas)
     esperados = sorted(cfg.marcadores_esquina.ids_esperados)
     encontrados_esquina = sorted(set(detectados) & set(esperados))
     print("\n  marcadores de esquina esperados : {}".format(esperados))
@@ -238,7 +239,8 @@ def verificar_degradacion(cfg, umbral_mm: float) -> bool:
         ("dos tapados: no hay con qué verificar", 2, False),
     ):
         im = _tapar(imagen, verdad, tapados)
-        detectados = detectar_marcadores(im, cfg.marcadores_esquina.nombre_diccionario)
+        detectados = detectar_marcadores(im, cfg.marcadores_esquina.nombre_diccionario,
+                                         cfg.deteccion_marcadores.refinamiento_esquinas)
         try:
             sistema = anclaje.actualizar(im, detectados)
             peor, _ = medir(verdad, sistema, celdas)
@@ -262,13 +264,15 @@ def verificar_degradacion(cfg, umbral_mm: float) -> bool:
         anclaje2 = AnclajeCancha(cfg)
         base, _ = generar(cfg, perspectiva=persp)
         anclaje2.actualizar(base, detectar_marcadores(
-            base, cfg.marcadores_esquina.nombre_diccionario))
+            base, cfg.marcadores_esquina.nombre_diccionario,
+            cfg.deteccion_marcadores.refinamiento_esquinas))
         movida = Perspectiva(activa=True, inclinacion_grados=persp.inclinacion_grados + grados)
         im2, v2 = generar(cfg, perspectiva=movida)
         im2 = _tapar(im2, v2, 1)
         try:
             anclaje2.actualizar(im2, detectar_marcadores(
-                im2, cfg.marcadores_esquina.nombre_diccionario))
+                im2, cfg.marcadores_esquina.nombre_diccionario,
+                cfg.deteccion_marcadores.refinamiento_esquinas))
             paso = not debe_rechazar
             veredicto = "acepta"
         except ErrorGeometria:
@@ -364,7 +368,8 @@ def verificar_duplicados(cfg, umbral_mm: float) -> bool:
     todo_bien = True
     for nombre, extras, debe_resolver, lado_esperado, rovers in casos:
         imagen, _ = generar(cfg, rovers=rovers, perspectiva=persp, marcadores_extra=extras)
-        crudos = detectar_marcadores_crudo(imagen, dicc)
+        crudos = detectar_marcadores_crudo(
+            imagen, dicc, cfg.deteccion_marcadores.refinamiento_esquinas)
         repetido = extras[0].id
         cuantos = sum(1 for i, _ in crudos if i == repetido)
         if cuantos < 2:

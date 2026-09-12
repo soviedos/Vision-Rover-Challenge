@@ -319,7 +319,8 @@ def main(argv: list[str] | None = None) -> int:
             # CRUDO: sin colapsar por ID. Lo que se pierde al armar el
             # diccionario es justamente el caso peligroso.
             crudos = detectar_marcadores_crudo(
-                cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario)
+                cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario,
+                cfg.deteccion_marcadores.refinamiento_esquinas)
 
             repetidos = {}
             for id_aruco, _ in crudos:

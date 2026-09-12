@@ -328,7 +328,8 @@ def correr_modo(cfg, con_perspectiva: bool, holgura_mm: float) -> bool:
         cubos = tuple(cubos)
 
         imagen, verdad = generar(cfg, rovers=(), cubos=cubos, perspectiva=persp)
-        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                         cfg.deteccion_marcadores.refinamiento_esquinas)
         try:
             sistema = construir_sistema(imagen, cfg, detectados)
         except ErrorGeometria as exc:

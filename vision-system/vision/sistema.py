@@ -205,7 +205,8 @@ def procesar(cuadro, cfg, matriz_camara, fase, seguidor, anclaje, descartados, d
     observación, y la edad de todos los objetos tiene que seguir creciendo.
     """
     crudos = detectar_marcadores_crudo(
-        cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario)
+        cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario,
+        cfg.deteccion_marcadores.refinamiento_esquinas)
     # Lo que se espera del marcador de un rover no es una constante: está a 80 mm
     # del tablero, así que se ve más grande Y corrido hacia afuera. Las dos cosas
     # salen de la pose deducida de la geometría GUARDADA —la de este cuadro

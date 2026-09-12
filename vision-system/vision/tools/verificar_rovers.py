@@ -310,7 +310,8 @@ def correr_modo(cfg, con_perspectiva: bool, umbral_mm: float, umbral_grados: flo
         cfg_escenario = cfg_que_acepta(cfg, rovers_demo)
         imagen, verdad = generar(cfg, rovers=rovers_demo, perspectiva=persp,
                                  con_cuerpo=con_cuerpo, cubos=cubos)
-        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                         cfg.deteccion_marcadores.refinamiento_esquinas)
         try:
             # Se le pasa la detección ya hecha: un solo paso del detector por cuadro.
             sistema = construir_sistema(imagen, cfg_escenario, detectados)
@@ -387,7 +388,8 @@ def verificar_lista_explicita(cfg, persp) -> bool:
                    for k, i in enumerate(declarados + intrusos))
 
     imagen, verdad = generar(cfg, rovers=rovers, perspectiva=persp, cubos=())
-    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                     cfg.deteccion_marcadores.refinamiento_esquinas)
     sistema = construir_sistema(imagen, cfg, detectados)
     vistos = detectar_rovers(detectados, sistema, cfg,
                              pose_camara(sistema, verdad.camara.matriz))
